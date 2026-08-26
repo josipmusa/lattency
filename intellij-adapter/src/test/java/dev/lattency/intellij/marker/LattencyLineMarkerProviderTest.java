@@ -335,6 +335,46 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
         assertTooltip(markersAtLine.getFirst(), "Example.read", "[FILE]", "Example.persist", "[DB]");
     }
 
+    public void testRemovingTheSinkAtTheBottomUpdatesMarkersUpTheChain() {
+        addFileApi();
+        String sinkStatement = "return java.nio.file.Files.readString(path);";
+        configure("""
+                package example;
+                class Example {
+                    String top(java.nio.file.Path path) {
+                        return middle(path);
+                    }
+                    String middle(java.nio.file.Path path) {
+                        return bottom(path);
+                    }
+                    String bottom(java.nio.file.Path path) {
+                        %s
+                    }
+                }
+                """.formatted(sinkStatement));
+        assertSize(3, declarationMarkers());
+
+        Document document = myFixture.getEditor().getDocument();
+        int start = document.getText().indexOf(sinkStatement);
+        WriteCommandAction.runWriteCommandAction(
+                getProject(),
+                () -> document.replaceString(
+                        start, start + sinkStatement.length(), "return \"memory\";"));
+        assertEmpty(declarationMarkers());
+
+        int replacementStart = document.getText().indexOf("return \"memory\";");
+        WriteCommandAction.runWriteCommandAction(
+                getProject(),
+                () -> document.replaceString(
+                        replacementStart,
+                        replacementStart + "return \"memory\";".length(),
+                        sinkStatement));
+        List<GutterMark> restored = declarationMarkers();
+        assertSize(3, restored);
+        assertTooltip(markerWithTooltipFragment(restored, "top"),
+                "top", "Example.middle", "Example.bottom", "[FILE]");
+    }
+
     public void testMarkerTracksLiveDocumentEdits() {
         addFileApi();
         String sinkStatement = "return java.nio.file.Files.readString(path);";
