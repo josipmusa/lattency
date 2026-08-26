@@ -6,11 +6,13 @@ import java.util.Set;
 import javax.swing.Icon;
 
 public final class LattencyIcons {
-    public static final Icon DB = load("db");
-    public static final Icon HTTP = load("http");
-    public static final Icon MESSAGING = load("messaging");
-    public static final Icon FILE = load("file");
-    public static final Icon GENERIC = load("generic");
+    public static final Icon DB = IconLoader.getIcon("/icons/db.svg", LattencyIcons.class);
+    public static final Icon HTTP = IconLoader.getIcon("/icons/http.svg", LattencyIcons.class);
+    public static final Icon MESSAGING =
+            IconLoader.getIcon("/icons/messaging.svg", LattencyIcons.class);
+    public static final Icon FILE = IconLoader.getIcon("/icons/file.svg", LattencyIcons.class);
+    public static final Icon GENERIC =
+            IconLoader.getIcon("/icons/generic.svg", LattencyIcons.class);
 
     private LattencyIcons() {}
 
@@ -25,9 +27,5 @@ public final class LattencyIcons {
             case FILE -> FILE;
             case GENERIC -> GENERIC;
         };
-    }
-
-    private static Icon load(String name) {
-        return IconLoader.getIcon("/icons/" + name + ".svg", LattencyIcons.class);
     }
 }
