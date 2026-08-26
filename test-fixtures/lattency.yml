@@ -5,4 +5,3 @@ sinks:
     category: HTTP
 exclude:
   - dev.lattency.fixtures.excluded
-  - dev.lattency.fixtures.future

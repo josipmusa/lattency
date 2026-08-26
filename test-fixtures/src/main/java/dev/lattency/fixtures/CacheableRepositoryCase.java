@@ -1,4 +1,4 @@
-package dev.lattency.fixtures.future;
+package dev.lattency.fixtures;
 
 import dev.lattency.fixtures.support.Order;
 import dev.lattency.fixtures.support.OrderRepository;
@@ -11,9 +11,15 @@ public final class CacheableRepositoryCase {
         this.repository = repository;
     }
 
-    // lattency-future: represent this repository access as conditional I/O.
+    // Expect: DB marker, direct - the body itself always hits the repository when run.
     @Cacheable("orders")
     public Order find(Order order) {
         return repository.save(order);
+    }
+
+    // Expect: GENERIC marker with a conditional (@Cacheable) edge to find; the walk
+    // stops at the cacheable callee, so no DB category is claimed here.
+    public Order lookup(Order order) {
+        return find(order);
     }
 }
