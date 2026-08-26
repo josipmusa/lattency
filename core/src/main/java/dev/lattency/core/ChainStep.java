@@ -3,14 +3,20 @@ package dev.lattency.core;
 import java.util.Objects;
 
 /**
- * One link in a sink chain: a method reference in display form, plus whether the
- * edge into it is conditional (e.g. the callee is behind a caching annotation).
+ * One link in a sink chain: the method reached at this hop, plus whether the edge
+ * into it is conditional (e.g. the callee is behind a caching annotation).
  */
-public record ChainStep(String methodReference, boolean conditional) {
+public record ChainStep(String classFqn, String methodName, boolean conditional) {
     public ChainStep {
-        Objects.requireNonNull(methodReference, "methodReference");
-        if (methodReference.isBlank()) {
-            throw new IllegalArgumentException("A chain step needs a method reference");
+        Objects.requireNonNull(classFqn, "classFqn");
+        Objects.requireNonNull(methodName, "methodName");
+        if (classFqn.isBlank() || methodName.isBlank()) {
+            throw new IllegalArgumentException("A chain step needs a class and a method name");
         }
+    }
+
+    /** Short human-readable form, e.g. {@code OrderRepository.save}. */
+    public String display() {
+        return classFqn.substring(classFqn.lastIndexOf('.') + 1) + "." + methodName;
     }
 }

@@ -10,9 +10,9 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class MethodColoringTest {
-    private static final ChainStep SAVE = new ChainStep("OrderRepository.save", false);
-    private static final ChainStep BOTTOM = new ChainStep("Example.bottom", false);
-    private static final ChainStep MIDDLE = new ChainStep("Example.middle", false);
+    private static final ChainStep SAVE = new ChainStep("example.OrderRepository", "save", false);
+    private static final ChainStep BOTTOM = new ChainStep("example.Example", "bottom", false);
+    private static final ChainStep MIDDLE = new ChainStep("example.Example", "middle", false);
 
     @Test
     void uncoloredHasNoChainsAndNoCategories() {
@@ -46,7 +46,7 @@ class MethodColoringTest {
     @Test
     void anyDirectChainMakesTheColoringDirect() {
         MethodColoring coloring = MethodColoring.of(List.of(
-                new SinkChain(IoCategory.HTTP, List.of(MIDDLE, new ChainStep("Client.post", false))),
+                new SinkChain(IoCategory.HTTP, List.of(MIDDLE, new ChainStep("example.Client", "post", false))),
                 new SinkChain(IoCategory.DB, List.of(SAVE))));
 
         assertEquals(MethodColoring.Origin.DIRECT, coloring.origin());
@@ -66,7 +66,7 @@ class MethodColoringTest {
     @Test
     void keepsOneChainPerDistinctCategory() {
         SinkChain db = new SinkChain(IoCategory.DB, List.of(SAVE));
-        SinkChain http = new SinkChain(IoCategory.HTTP, List.of(new ChainStep("Client.post", false)));
+        SinkChain http = new SinkChain(IoCategory.HTTP, List.of(new ChainStep("example.Client", "post", false)));
 
         MethodColoring coloring = MethodColoring.of(List.of(db, http));
 
@@ -77,7 +77,7 @@ class MethodColoringTest {
     @Test
     void chainConditionalWhenAnyStepIsConditional() {
         SinkChain conditional = new SinkChain(
-                IoCategory.GENERIC, List.of(new ChainStep("OrderService.find", true)));
+                IoCategory.GENERIC, List.of(new ChainStep("example.OrderService", "find", true)));
         SinkChain unconditional = new SinkChain(IoCategory.DB, List.of(SAVE));
 
         assertTrue(conditional.conditional());
@@ -104,5 +104,11 @@ class MethodColoringTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new SinkChain(IoCategory.DB, List.of()));
+    }
+
+    @Test
+    void stepDisplayUsesSimpleClassName() {
+        assertEquals("OrderRepository.save", SAVE.display());
+        assertEquals("Inner.run", new ChainStep("a.b.Outer.Inner", "run", false).display());
     }
 }

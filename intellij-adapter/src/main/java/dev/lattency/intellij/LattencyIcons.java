@@ -2,6 +2,7 @@ package dev.lattency.intellij;
 
 import com.intellij.openapi.util.IconLoader;
 import dev.lattency.core.IoCategory;
+import dev.lattency.core.MethodColoring;
 import java.util.Set;
 import javax.swing.Icon;
 
@@ -15,6 +16,10 @@ public final class LattencyIcons {
             IconLoader.getIcon("/icons/generic.svg", LattencyIcons.class);
 
     private LattencyIcons() {}
+
+    public static Icon forColoring(Set<IoCategory> categories, MethodColoring.Origin origin) {
+        return forCategories(categories);
+    }
 
     public static Icon forCategories(Set<IoCategory> categories) {
         if (categories.size() != 1) {

@@ -11,20 +11,25 @@ import java.nio.file.Path;
 import java.util.List;
 
 public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFixtureTestCase {
-    public void testMarksSpringDataRepositoryCallAsDb() {
-        myFixture.addClass("""
-                package org.springframework.data.repository;
-                public interface Repository<T, ID> {}
-                """);
-        myFixture.addClass("""
-                package example;
-                public interface OrderRepository
-                        extends org.springframework.data.repository.Repository<String, Long> {
-                    String save(String value);
-                }
-                """);
+    private static final String DECLARATION_TOOLTIP = "Lattency I/O:";
+    private static final String CALL_SITE_TOOLTIP = "Lattency I/O call:";
 
-        GutterMark marker = singleMarker("""
+    @Override
+    protected void tearDown() throws Exception {
+        try {
+            String basePath = getProject().getBasePath();
+            if (basePath != null) {
+                Files.deleteIfExists(Path.of(basePath, "lattency.yml"));
+            }
+        } finally {
+            super.tearDown();
+        }
+    }
+
+    public void testMarksSpringDataRepositoryCallAsDb() {
+        addSpringDataRepository();
+
+        GutterMark marker = singleDeclarationMarker("""
                 package example;
                 class Example {
                     void persist(OrderRepository repository) { repository.save("order"); }
@@ -32,7 +37,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 """);
 
         assertSame(LattencyIcons.DB, marker.getIcon());
-        assertTooltip(marker, "OrderRepository.save", "[DB]");
+        assertTooltip(marker, "persist", "OrderRepository.save", "[DB]");
     }
 
     public void testMarksHttpSink() {
@@ -41,7 +46,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 public class RestClient { public String get() { return "ok"; } }
                 """);
 
-        GutterMark marker = singleMarker("""
+        GutterMark marker = singleDeclarationMarker("""
                 package example;
                 class Example {
                     String fetch(org.springframework.web.client.RestClient client) {
@@ -60,7 +65,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 public class KafkaProducer { public void send(String value) {} }
                 """);
 
-        GutterMark marker = singleMarker("""
+        GutterMark marker = singleDeclarationMarker("""
                 package example;
                 class Example {
                     void publish(org.apache.kafka.clients.producer.KafkaProducer producer) {
@@ -75,7 +80,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
 
     public void testMarksFileSink() {
         addFileApi();
-        GutterMark marker = singleMarker("""
+        GutterMark marker = singleDeclarationMarker("""
                 package example;
                 class Example {
                     String read(java.nio.file.Path path) {
@@ -91,7 +96,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
     public void testMarksBlockingMethodAsGenericIo() {
         addJetBrainsAnnotation("Blocking");
 
-        GutterMark marker = singleMarker("""
+        GutterMark marker = singleDeclarationMarker("""
                 package example;
                 class Example {
                     @org.jetbrains.annotations.Blocking void waitForWork() {}
@@ -99,7 +104,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 """);
 
         assertSame(LattencyIcons.GENERIC, marker.getIcon());
-        assertTooltip(marker, "waitForWork()", "[GENERIC]");
+        assertTooltip(marker, "waitForWork", "[GENERIC]");
     }
 
     public void testNonBlockingSuppressesSink() {
@@ -114,7 +119,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 }
                 """);
 
-        assertEmpty(myFixture.findAllGutters());
+        assertEmpty(declarationMarkers());
     }
 
     public void testMarksCustomYamlSink() throws IOException {
@@ -130,7 +135,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 public class RemoteClient { public String fetch() { return "ok"; } }
                 """);
 
-        GutterMark marker = singleMarker("""
+        GutterMark marker = singleDeclarationMarker("""
                 package example;
                 class Example {
                     String load(RemoteClient client) { return client.fetch(); }
@@ -155,15 +160,14 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 }
                 """);
 
-        assertEmpty(myFixture.findAllGutters());
+        assertEmpty(declarationMarkers());
     }
 
-    public void testDoesNotPropagateThroughCallChain() {
+    public void testPropagatesThroughCallChain() {
         addFileApi();
         configure("""
                 package example;
                 class Example {
-                    // lattency-future: top should inherit FILE from bottom later.
                     String top(java.nio.file.Path path) {
                         return middle(path);
                     }
@@ -176,9 +180,156 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 }
                 """);
 
-        List<GutterMark> markers = lattencyMarkers();
-        assertSize(1, markers);
-        assertTooltip(markers.getFirst(), "Files.readString", "[FILE]");
+        List<GutterMark> markers = declarationMarkers();
+        assertSize(3, markers);
+        GutterMark topMarker = markerWithTooltipFragment(markers, "top");
+        assertTooltip(topMarker,
+                "top", "Example.middle", "Example.bottom", "Files.readString", "[FILE]");
+    }
+
+    public void testInterfaceCallColoredWhenAnyImplementationColored() {
+        addFileApi();
+        myFixture.addClass("""
+                package example;
+                public interface ContentSource { String load(java.nio.file.Path path); }
+                """);
+        myFixture.addClass("""
+                package example;
+                public class FileContentSource implements ContentSource {
+                    @Override public String load(java.nio.file.Path path) {
+                        return java.nio.file.Files.readString(path);
+                    }
+                }
+                """);
+        myFixture.addClass("""
+                package example;
+                public class MemoryContentSource implements ContentSource {
+                    @Override public String load(java.nio.file.Path path) { return "memory"; }
+                }
+                """);
+
+        GutterMark marker = singleDeclarationMarker("""
+                package example;
+                class Example {
+                    String invoke(ContentSource source, java.nio.file.Path path) {
+                        return source.load(path);
+                    }
+                }
+                """);
+
+        assertTooltip(marker, "invoke", "FileContentSource.load", "[FILE]");
+        assertFalse(marker.getTooltipText().contains("MemoryContentSource"));
+    }
+
+    public void testCacheableCalleeMakesAConditionalEdge() {
+        addSpringDataRepository();
+        addCacheableAnnotation();
+        configure("""
+                package example;
+                class Example {
+                    OrderRepository repository;
+                    @org.springframework.cache.annotation.Cacheable("orders")
+                    String find() { return repository.save("x"); }
+                    String caller() { return find(); }
+                }
+                """);
+
+        List<GutterMark> markers = declarationMarkers();
+        assertSize(2, markers);
+        GutterMark callerMarker = markerWithTooltipFragment(markers, "caller");
+        assertTooltip(callerMarker, "Example.find", "@Cacheable", "conditional");
+    }
+
+    public void testCycleTerminatesAndColorsCorrectly() {
+        addFileApi();
+        configure("""
+                package example;
+                class Example {
+                    void a(java.nio.file.Path path) {
+                        b(path);
+                        java.nio.file.Files.readString(path);
+                    }
+                    void b(java.nio.file.Path path) {
+                        a(path);
+                    }
+                }
+                """);
+
+        List<GutterMark> markers = declarationMarkers();
+        assertSize(2, markers);
+        GutterMark cycleMarker = markerWithTooltipFragment(markers, "Example.a");
+        assertTooltip(cycleMarker, "Example.a", "Files.readString", "[FILE]");
+    }
+
+    public void testChainBeyondConfiguredDepthIsUnmarked() throws IOException {
+        writeConfig("depth: 1");
+        addFileApi();
+        configure("""
+                package example;
+                class Example {
+                    String top(java.nio.file.Path path) {
+                        return middle(path);
+                    }
+                    String middle(java.nio.file.Path path) {
+                        return bottom(path);
+                    }
+                    String bottom(java.nio.file.Path path) {
+                        return java.nio.file.Files.readString(path);
+                    }
+                }
+                """);
+
+        List<GutterMark> markers = declarationMarkers();
+        assertSize(2, markers);
+        for (GutterMark marker : markers) {
+            assertFalse(marker.getTooltipText(), marker.getTooltipText().contains("top"));
+        }
+    }
+
+    public void testCallSiteOfColoredMethodGetsALineMarker() {
+        addFileApi();
+        configure("""
+                package example;
+                class Example {
+                    String read(java.nio.file.Path path) {
+                        return java.nio.file.Files.readString(path);
+                    }
+                    String use(java.nio.file.Path path) {
+                        return read(path);
+                    }
+                }
+                """);
+
+        List<GutterMark> markers = callSiteMarkers();
+        GutterMark useCallMarker = markerWithTooltipFragment(markers, "Example.read");
+        assertTooltip(useCallMarker, "Example.read", "Files.readString", "[FILE]");
+    }
+
+    public void testOneCallSiteMarkerPerLineListingAllCalls() {
+        addFileApi();
+        addSpringDataRepository();
+        configure("""
+                package example;
+                class Example {
+                    OrderRepository repository;
+                    String read(java.nio.file.Path path) {
+                        return java.nio.file.Files.readString(path);
+                    }
+                    String persist() {
+                        return repository.save("x");
+                    }
+                    String both(java.nio.file.Path path) {
+                        return re<caret>ad(path) + persist();
+                    }
+                }
+                """);
+
+        List<GutterMark> markersAtLine = myFixture.findGuttersAtCaret().stream()
+                .filter(marker -> hasTooltipFragment(marker, CALL_SITE_TOOLTIP))
+                .toList();
+
+        assertSize(1, markersAtLine);
+        assertTooltip(markersAtLine.getFirst(), "Example.read", "[FILE]", "Example.persist", "[DB]");
     }
 
     public void testMarkerTracksLiveDocumentEdits() {
@@ -192,7 +343,7 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                     }
                 }
                 """.formatted(sinkStatement));
-        assertSize(1, lattencyMarkers());
+        assertSize(1, declarationMarkers());
 
         Document document = myFixture.getEditor().getDocument();
         int start = document.getText().indexOf(sinkStatement);
@@ -200,19 +351,19 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 getProject(),
                 () -> document.replaceString(
                         start, start + sinkStatement.length(), "return \"memory\";"));
-        assertEmpty(lattencyMarkers());
+        assertEmpty(declarationMarkers());
 
         int replacementStart = document.getText().indexOf("return \"memory\";");
         WriteCommandAction.runWriteCommandAction(
                 getProject(),
                 () -> document.replaceString(
                         replacementStart, replacementStart + "return \"memory\";".length(), sinkStatement));
-        assertSize(1, lattencyMarkers());
+        assertSize(1, declarationMarkers());
     }
 
-    private GutterMark singleMarker(String source) {
+    private GutterMark singleDeclarationMarker(String source) {
         configure(source);
-        List<GutterMark> markers = lattencyMarkers();
+        List<GutterMark> markers = declarationMarkers();
         assertSize(1, markers);
         return markers.getFirst();
     }
@@ -238,11 +389,52 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                 """);
     }
 
-    private List<GutterMark> lattencyMarkers() {
+    private void addSpringDataRepository() {
+        myFixture.addClass("""
+                package org.springframework.data.repository;
+                public interface Repository<T, ID> {}
+                """);
+        myFixture.addClass("""
+                package example;
+                public interface OrderRepository
+                        extends org.springframework.data.repository.Repository<String, Long> {
+                    String save(String value);
+                }
+                """);
+    }
+
+    private void addCacheableAnnotation() {
+        myFixture.addClass("""
+                package org.springframework.cache.annotation;
+                public @interface Cacheable { String[] value() default {}; }
+                """);
+    }
+
+    private List<GutterMark> declarationMarkers() {
+        return markersWithPrefix(DECLARATION_TOOLTIP);
+    }
+
+    private List<GutterMark> callSiteMarkers() {
+        return markersWithPrefix(CALL_SITE_TOOLTIP);
+    }
+
+    private List<GutterMark> markersWithPrefix(String prefix) {
         return myFixture.findAllGutters().stream()
-                .filter(marker -> marker.getTooltipText() != null
-                        && marker.getTooltipText().contains("Lattency direct I/O"))
+                .filter(marker -> hasTooltipFragment(marker, prefix))
                 .toList();
+    }
+
+    private static boolean hasTooltipFragment(GutterMark marker, String fragment) {
+        return marker.getTooltipText() != null && marker.getTooltipText().contains(fragment);
+    }
+
+    private static GutterMark markerWithTooltipFragment(List<GutterMark> markers, String fragment) {
+        return markers.stream()
+                .filter(marker -> hasTooltipFragment(marker, fragment))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "No marker mentions '" + fragment + "' among: "
+                                + markers.stream().map(GutterMark::getTooltipText).toList()));
     }
 
     private void writeConfig(String yaml) throws IOException {
