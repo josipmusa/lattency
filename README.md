@@ -1,8 +1,14 @@
 # Lattency
 
-Lattency is an IntelliJ IDEA plugin that will mark direct and transitive I/O in Java code.
-The current scaffold proves the end-to-end gutter integration by marking every Java method
-named `test`.
+Lattency is an IntelliJ IDEA plugin that marks I/O in Java code.
+
+Milestone 1 detects direct database, HTTP, messaging, file, and generic blocking sinks in
+method bodies. It includes zero-configuration rules for common Java and Spring APIs, supports
+custom sinks and exclusions through project-root `lattency.yml`, suppresses `@NonBlocking`
+methods, and displays a category glyph with a per-call explanation in the method gutter.
+Transitive propagation and call-site markers are intentionally deferred.
+
+![A DB marker on the Spring Data fixture](docs/milestone-1-marker.png)
 
 ## Modules
 
@@ -12,9 +18,9 @@ named `test`.
 ## Run
 
 ```shell
-./gradlew test
-./gradlew :intellij-adapter:runIde --args="$(pwd)/demo/src/main/java/Demo.java"
+./gradlew build
+./gradlew :intellij-adapter:runIde --args="$(pwd)/test-fixtures"
 ```
 
-The sandbox IDE opens `Demo.java`. A purple arrow appears in the gutter beside `test`, while
-`unmarked` has no Lattency marker.
+The fixture project also works as a standalone Gradle build and contains one named Java class
+for each supported, suppressed, excluded, and future behavior.

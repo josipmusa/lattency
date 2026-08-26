@@ -21,7 +21,11 @@ public final class BuiltInSinks {
             SinkDefinition.annotation(
                     "org.springframework.cloud.openfeign.FeignClient", IoCategory.HTTP),
             SinkDefinition.className("javax.sql.DataSource", IoCategory.DB),
+            SinkDefinition.supertype("javax.sql.DataSource", IoCategory.DB),
             SinkDefinition.packagePrefix("java.sql", IoCategory.DB),
+            SinkDefinition.supertype("java.sql.Connection", IoCategory.DB),
+            SinkDefinition.supertype("java.sql.Statement", IoCategory.DB),
+            SinkDefinition.supertype("java.sql.PreparedStatement", IoCategory.DB),
             SinkDefinition.className(
                     "org.springframework.jdbc.core.JdbcTemplate", IoCategory.DB),
             SinkDefinition.className(
@@ -35,12 +39,14 @@ public final class BuiltInSinks {
             SinkDefinition.className(
                     "org.springframework.amqp.rabbit.core.RabbitTemplate", IoCategory.MESSAGING),
             SinkDefinition.className("java.nio.file.Files", IoCategory.FILE),
+            SinkDefinition.className("java.io.File", IoCategory.FILE),
             SinkDefinition.className("java.io.FileInputStream", IoCategory.FILE),
             SinkDefinition.className("java.io.FileOutputStream", IoCategory.FILE),
             SinkDefinition.className("java.io.FileReader", IoCategory.FILE),
             SinkDefinition.className("java.io.FileWriter", IoCategory.FILE),
             SinkDefinition.className("java.io.BufferedReader", IoCategory.FILE),
             SinkDefinition.className("java.io.BufferedWriter", IoCategory.FILE),
+            SinkDefinition.className("java.io.RandomAccessFile", IoCategory.FILE),
             SinkDefinition.annotation(BLOCKING, IoCategory.GENERIC));
 
     private BuiltInSinks() {}

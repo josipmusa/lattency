@@ -18,6 +18,7 @@ dependencies {
         intellijIdea("2025.2.6.2")
         bundledPlugin("com.intellij.java")
         testFramework(TestFrameworkType.Platform)
+        testFramework(TestFrameworkType.Plugin.Java)
     }
 
     testImplementation("junit:junit:4.13.2")
@@ -34,4 +35,3 @@ intellijPlatform {
         }
     }
 }
-

@@ -51,6 +51,17 @@ class SinkMatcherTest {
     }
 
     @Test
+    void matchesJdbcImplementationsThroughApiSupertypes() {
+        var facts = new SinkFacts(
+                "com.zaxxer.hikari.pool.HikariProxyConnection",
+                Set.of("java.sql.Connection"),
+                "commit",
+                Set.of());
+
+        assertEquals(IoCategory.DB, matcher.match(facts).orElseThrow());
+    }
+
+    @Test
     void exclusionsWinOverSinkRules() {
         var configured = new SinkMatcher(new LattencyConfig(List.of(), List.of("java.nio")));
         assertTrue(configured.match(facts("java.nio.file.Files", "readString")).isEmpty());

@@ -8,6 +8,10 @@ java {
     }
 }
 
+repositories {
+    mavenCentral()
+}
+
 dependencies {
     implementation("org.springframework.data:spring-data-commons:3.5.4")
     implementation("org.springframework:spring-web:6.2.11")
