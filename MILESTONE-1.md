@@ -26,10 +26,10 @@ milestone.
 
 ### 1. Core module — sink model (pure Java, no com.intellij.* imports)
 
-- [ ] Sink definition model: matches by package prefix, fully-qualified class,
+- [x] Sink definition model: matches by package prefix, fully-qualified class,
       class + method name, or annotation FQN; each sink has a category:
       DB, HTTP, MESSAGING, FILE, GENERIC.
-- [ ] Built-in default sink set covering (see SPEC.md §2):
+- [x] Built-in default sink set covering (see SPEC.md §2):
       - Spring Data: any method on a type in the Spring Data Repository hierarchy
         (represented in core as a "supertype sink" the plugin module queries with
         a supertype list) → DB
@@ -43,23 +43,23 @@ milestone.
       - java.nio.file.Files, java.io file streams/readers/writers → FILE
       - org.jetbrains.annotations.Blocking annotation → GENERIC sink;
         org.jetbrains.annotations.NonBlocking → suppression (method is never marked)
-- [ ] YAML config: parse `lattency.yml` from project root; supports adding custom
+- [x] YAML config: parse `lattency.yml` from project root; supports adding custom
       sinks (pattern + category) and excluding packages/classes. Missing file =
       defaults only. Malformed file = defaults + a logged warning, never a crash.
-- [ ] Unit tests for matching logic and YAML parsing (plain JUnit, no IDE).
-- [ ] ArchUnit test in core: no class in the core module imports com.intellij.*.
+- [x] Unit tests for matching logic and YAML parsing (plain JUnit, no IDE).
+- [x] ArchUnit test in core: no class in the core module imports com.intellij.*.
 
 ### 2. Fixture project (test-fixtures/)
 
 Minimal Spring Boot project (does not need to actually run; it needs to compile and
 resolve types), containing one clearly named class per case:
 
-- [ ] Detected in this milestone: a Spring Data repository call; a RestClient call;
+- [x] Detected in this milestone: a Spring Data repository call; a RestClient call;
       a JdbcTemplate call; a Kafka or Pub/Sub publish; a Files.readString; a method
       annotated @Blocking; a method annotated @NonBlocking that contains a sink call
       (must NOT be marked); a class matched by a custom sink in the fixture's
       lattency.yml; a class excluded via lattency.yml (must NOT be marked).
-- [ ] Placeholders for later milestones (present in code, expected UNMARKED for
+- [x] Placeholders for later milestones (present in code, expected UNMARKED for
       now, each with a `// lattency-future:` comment): a call chain 3 levels deep
       ending in a repository; an interface with two implementations where one does
       I/O; a @Cacheable method wrapping a repository call; a LAZY @ManyToOne getter
@@ -67,49 +67,49 @@ resolve types), containing one clearly named class per case:
 
 ### 3. Plugin module — PSI → core translation
 
-- [ ] For each method call expression in a method body, extract: resolved method's
+- [x] For each method call expression in a method body, extract: resolved method's
       containing class FQN, its supertype FQNs, method name, and annotations of the
       resolved method; pass these facts to core's matcher.
-- [ ] Spring Data detection MUST work via supertype check against
+- [x] Spring Data detection MUST work via supertype check against
       org.springframework.data.repository.Repository, not via class-name matching.
-- [ ] Method-level @NonBlocking on the containing method suppresses marking of that
+- [x] Method-level @NonBlocking on the containing method suppresses marking of that
       method entirely.
-- [ ] Load lattency.yml from the project base dir; changes picked up without IDE
+- [x] Load lattency.yml from the project base dir; changes picked up without IDE
       restart (re-read on change; a file listener or per-analysis re-read is fine —
       pick the simplest verified pattern).
 
 ### 4. Line markers
 
-- [ ] Gutter icon on the METHOD NAME IDENTIFIER (leaf element, per AGENTS.md) of any
+- [x] Gutter icon on the METHOD NAME IDENTIFIER (leaf element, per AGENTS.md) of any
       method whose body directly contains ≥1 sink call.
-- [ ] Category-specific placeholder icons (simple colored glyphs are fine: DB, HTTP,
+- [x] Category-specific placeholder icons (simple colored glyphs are fine: DB, HTTP,
       MSG, FILE, IO). Multiple categories in one method → one combined/generic icon
       is acceptable for now.
-- [ ] Tooltip lists each detected sink call: `<callee> → [CATEGORY]`, one per line.
-- [ ] Fast pass stays cheap: filter to method-name identifiers before any resolve();
+- [x] Tooltip lists each detected sink call: `<callee> → [CATEGORY]`, one per line.
+- [x] Fast pass stays cheap: filter to method-name identifiers before any resolve();
       follow AGENTS.md fast/slow pass guidance.
-- [ ] Dumb mode: return no markers, no exceptions.
+- [x] Dumb mode: return no markers, no exceptions.
 
 ### 5. Platform tests
 
-- [ ] Marker present/absent tests on fixture-style code for: each sink category,
+- [x] Marker present/absent tests on fixture-style code for: each sink category,
       @Blocking (present), @NonBlocking suppression (absent), custom YAML sink
       (present), YAML exclusion (absent), and one future-placeholder case
       (absent — pins depth-0 behavior).
-- [ ] Verify the test base class choice against the reference repos before writing
+- [x] Verify the test base class choice against the reference repos before writing
       tests (this API area churns).
 
 ## Acceptance checklist (all must pass)
 
-- [ ] `./gradlew build` green: core unit tests, ArchUnit rule, platform tests.
-- [ ] Sandbox (`runIde`) with test-fixtures open: every "detected" case shows the
+- [x] `./gradlew build` green: core unit tests, ArchUnit rule, platform tests.
+- [x] Sandbox (`runIde`) with test-fixtures open: every "detected" case shows the
       correct category icon and a correct tooltip; every "must not be marked" case
       and every future placeholder shows nothing.
-- [ ] Editing a marked method to remove the sink call removes the icon after the
+- [x] Editing a marked method to remove the sink call removes the icon after the
       edit (no restart); re-adding it brings the icon back.
-- [ ] idea.log from the sandbox session contains no exceptions from Lattency.
-- [ ] Typing in a large file with markers shows no perceptible editor lag.
-- [ ] README updated: one paragraph on what works after this milestone + a
+- [x] idea.log from the sandbox session contains no exceptions from Lattency.
+- [x] Typing in a large file with markers shows no perceptible editor lag.
+- [x] README updated: one paragraph on what works after this milestone + a
       screenshot of the fixture project with markers.
 
 ## Working agreements for this milestone
