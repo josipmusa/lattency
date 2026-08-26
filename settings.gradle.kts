@@ -22,4 +22,4 @@ dependencyResolutionManagement {
     }
 }
 
-include("core", "intellij-adapter")
+include("core", "intellij-adapter", "test-fixtures")

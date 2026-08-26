@@ -1,0 +1,8 @@
+sinks:
+  - match:
+      class: dev.lattency.fixtures.support.CustomRemoteClient
+      method: fetch
+    category: HTTP
+exclude:
+  - dev.lattency.fixtures.excluded
+  - dev.lattency.fixtures.future
