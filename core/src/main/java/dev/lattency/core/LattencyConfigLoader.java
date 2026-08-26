@@ -21,7 +21,7 @@ public final class LattencyConfigLoader {
         }
         try (InputStream input = Files.newInputStream(path)) {
             Object document = new Load(LoadSettings.builder().build()).loadFromInputStream(input);
-            return parse(document);
+            return parse(document, warningLogger);
         } catch (RuntimeException | IOException exception) {
             warningLogger.accept("Could not read " + path + "; using built-in sinks: "
                     + exception.getMessage());
@@ -29,7 +29,7 @@ public final class LattencyConfigLoader {
         }
     }
 
-    private static LattencyConfig parse(Object document) {
+    private static LattencyConfig parse(Object document, Consumer<String> warningLogger) {
         if (document == null) {
             return LattencyConfig.defaultsOnly();
         }
@@ -67,7 +67,25 @@ public final class LattencyConfigLoader {
         for (Object exclusion : requireList(exclusionItems, "exclude")) {
             exclusions.add(requireString(exclusion, "exclude entry"));
         }
-        return new LattencyConfig(sinks, exclusions);
+        return new LattencyConfig(sinks, exclusions, parseDepth(root, warningLogger));
+    }
+
+    private static int parseDepth(Map<?, ?> root, Consumer<String> warningLogger) {
+        if (!root.containsKey("depth")) {
+            return LattencyConfig.DEFAULT_DEPTH;
+        }
+        if (!(root.get("depth") instanceof Integer depth)) {
+            throw new IllegalArgumentException("depth must be an integer");
+        }
+        if (depth < 0) {
+            throw new IllegalArgumentException("depth must not be negative");
+        }
+        if (depth > LattencyConfig.MAX_DEPTH) {
+            warningLogger.accept("Configured depth " + depth + " exceeds the hard cap; using "
+                    + LattencyConfig.MAX_DEPTH);
+            return LattencyConfig.MAX_DEPTH;
+        }
+        return depth;
     }
 
     private static Map<?, ?> requireMap(Object value, String field) {

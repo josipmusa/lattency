@@ -45,6 +45,66 @@ class LattencyConfigLoaderTest {
     }
 
     @Test
+    void missingDepthMeansDefaultDepth() throws IOException {
+        Path configFile = directory.resolve("lattency.yml");
+        Files.writeString(configFile, """
+                exclude:
+                  - com.acme.generated
+                """);
+
+        LattencyConfig config = LattencyConfigLoader.load(configFile, ignored -> {});
+
+        assertEquals(LattencyConfig.DEFAULT_DEPTH, config.depth());
+        assertEquals(4, LattencyConfig.DEFAULT_DEPTH);
+    }
+
+    @Test
+    void parsesConfiguredDepth() throws IOException {
+        Path configFile = directory.resolve("lattency.yml");
+        Files.writeString(configFile, "depth: 2");
+
+        assertEquals(2, LattencyConfigLoader.load(configFile, ignored -> {}).depth());
+    }
+
+    @Test
+    void clampsDepthToTheHardCapWithAWarning() throws IOException {
+        Path configFile = directory.resolve("lattency.yml");
+        Files.writeString(configFile, "depth: 50");
+        var warnings = new ArrayList<String>();
+
+        LattencyConfig config = LattencyConfigLoader.load(configFile, warnings::add);
+
+        assertEquals(LattencyConfig.MAX_DEPTH, config.depth());
+        assertEquals(10, LattencyConfig.MAX_DEPTH);
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.getFirst().contains("depth"));
+    }
+
+    @Test
+    void negativeDepthIsMalformed() throws IOException {
+        Path configFile = directory.resolve("lattency.yml");
+        Files.writeString(configFile, "depth: -1");
+        var warnings = new ArrayList<String>();
+
+        LattencyConfig config = LattencyConfigLoader.load(configFile, warnings::add);
+
+        assertEquals(LattencyConfig.defaultsOnly(), config);
+        assertEquals(1, warnings.size());
+    }
+
+    @Test
+    void nonNumericDepthIsMalformed() throws IOException {
+        Path configFile = directory.resolve("lattency.yml");
+        Files.writeString(configFile, "depth: shallow");
+        var warnings = new ArrayList<String>();
+
+        LattencyConfig config = LattencyConfigLoader.load(configFile, warnings::add);
+
+        assertEquals(LattencyConfig.defaultsOnly(), config);
+        assertEquals(1, warnings.size());
+    }
+
+    @Test
     void malformedFileLogsWarningAndUsesDefaults() throws IOException {
         Path configFile = directory.resolve("lattency.yml");
         Files.writeString(configFile, "sinks: definitely-not-a-list");

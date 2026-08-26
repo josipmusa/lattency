@@ -18,7 +18,8 @@ class SinkMatcherTest {
                         SinkDefinition.className("example.Files", IoCategory.FILE),
                         SinkDefinition.method("example.Bus", "send", IoCategory.MESSAGING),
                         SinkDefinition.annotation("example.Blocking", IoCategory.GENERIC)),
-                List.of()));
+                List.of(),
+                LattencyConfig.DEFAULT_DEPTH));
 
         assertEquals(IoCategory.HTTP, configured.match(facts("example.remote.Client", "get")).orElseThrow());
         assertEquals(IoCategory.FILE, configured.match(facts("example.Files", "read")).orElseThrow());
@@ -63,7 +64,8 @@ class SinkMatcherTest {
 
     @Test
     void exclusionsWinOverSinkRules() {
-        var configured = new SinkMatcher(new LattencyConfig(List.of(), List.of("java.nio")));
+        var configured = new SinkMatcher(new LattencyConfig(
+                List.of(), List.of("java.nio"), LattencyConfig.DEFAULT_DEPTH));
         assertTrue(configured.match(facts("java.nio.file.Files", "readString")).isEmpty());
     }
 

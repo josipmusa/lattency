@@ -1,6 +1,7 @@
 package dev.lattency.core;
 
 import java.util.List;
+import java.util.Set;
 
 /** Zero-configuration sink definitions for common Java and Spring applications. */
 public final class BuiltInSinks {
@@ -8,6 +9,13 @@ public final class BuiltInSinks {
     public static final String NON_BLOCKING = "org.jetbrains.annotations.NonBlocking";
     public static final String SPRING_DATA_REPOSITORY =
             "org.springframework.data.repository.Repository";
+
+    // Only annotations that can skip the method body on a cache hit; @CachePut and
+    // @CacheEvict always execute the body, so they do not make an edge conditional.
+    private static final Set<String> CACHING_ANNOTATIONS = Set.of(
+            "org.springframework.cache.annotation.Cacheable",
+            "javax.cache.annotation.CacheResult",
+            "jakarta.cache.annotation.CacheResult");
 
     private static final List<SinkDefinition> DEFINITIONS = List.of(
             SinkDefinition.supertype(SPRING_DATA_REPOSITORY, IoCategory.DB),
@@ -53,5 +61,9 @@ public final class BuiltInSinks {
 
     public static List<SinkDefinition> definitions() {
         return DEFINITIONS;
+    }
+
+    public static boolean isCachingAnnotation(String annotationFqn) {
+        return CACHING_ANNOTATIONS.contains(annotationFqn);
     }
 }
