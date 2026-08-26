@@ -13,7 +13,6 @@
     <extensions defaultExtensionNs="com.intellij">
         <codeInsight.lineMarkerProvider
             language="JAVA"
-            implementationClass="dev.lattency.intellij.marker.TestMethodLineMarkerProvider"/>
+            implementationClass="dev.lattency.intellij.marker.LattencyLineMarkerProvider"/>
     </extensions>
 </idea-plugin>
-
