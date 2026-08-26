@@ -185,6 +185,9 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
         GutterMark topMarker = markerWithTooltipFragment(markers, "top");
         assertTooltip(topMarker,
                 "top", "Example.middle", "Example.bottom", "Files.readString", "[FILE]");
+        assertSame(LattencyIcons.FILE_TRANSITIVE, topMarker.getIcon());
+        assertSame(LattencyIcons.FILE,
+                markerWithTooltipFragment(markers, "<br/>bottom &rarr;").getIcon());
     }
 
     public void testInterfaceCallColoredWhenAnyImplementationColored() {
