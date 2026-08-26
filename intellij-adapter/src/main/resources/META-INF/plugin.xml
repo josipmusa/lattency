@@ -1,0 +1,19 @@
+<idea-plugin>
+    <id>dev.lattency.intellij</id>
+    <name>Lattency</name>
+    <vendor>Josip Musa</vendor>
+
+    <description><![CDATA[
+        Marks methods that perform direct or transitive I/O.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <codeInsight.lineMarkerProvider
+            language="JAVA"
+            implementationClass="dev.lattency.intellij.marker.TestMethodLineMarkerProvider"/>
+    </extensions>
+</idea-plugin>
+
