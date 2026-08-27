@@ -4,7 +4,8 @@ plugins {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(
+            providers.gradleProperty("javaVersion").get().toInt())
     }
 }
 

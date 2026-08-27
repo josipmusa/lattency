@@ -1,0 +1,88 @@
+# Runs when a GitHub release is published: builds the plugin, attaches the ZIP to the
+# release, and moves the release notes into CHANGELOG.md.
+#
+# Publishing to the JetBrains Marketplace is optional and off until the secrets exist.
+# Add all four and it switches itself on; see the Releasing section of CONTRIBUTING.md.
+#   PUBLISH_TOKEN         Marketplace permanent token
+#   CERTIFICATE_CHAIN     plugin signing certificate chain (PEM)
+#   PRIVATE_KEY           plugin signing private key (PEM)
+#   PRIVATE_KEY_PASSWORD  password for that private key
+
+name: Release
+
+on:
+  release:
+    types: [ prereleased, released ]
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+      CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+      PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+      PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      - name: Build plugin
+        run: ./gradlew buildPlugin
+
+      # Signing is what the Marketplace requires; it is also just good practice for a
+      # ZIP people install by hand, so it runs whenever the key is available.
+      - name: Sign plugin
+        if: ${{ env.PRIVATE_KEY != '' }}
+        run: ./gradlew signPlugin verifyPluginSignature
+
+      - name: Publish to the JetBrains Marketplace
+        if: ${{ env.PUBLISH_TOKEN != '' }}
+        run: ./gradlew publishPlugin
+
+      - name: Attach the plugin to the GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" ./intellij-adapter/build/distributions/*.zip
+
+      - name: Move the release notes into CHANGELOG.md
+        if: ${{ github.event.release.body != '' }}
+        env:
+          CHANGELOG: ${{ github.event.release.body }}
+        run: |
+          NOTES=./build/tmp/release_note.txt
+          mkdir -p "$(dirname "$NOTES")"
+          printf '%s' "$CHANGELOG" > "$NOTES"
+          ./gradlew patchChangelog --release-note-file="$NOTES"
+
+      - name: Open a PR with the patched changelog
+        if: ${{ github.event.release.body != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          BRANCH="changelog-update-$VERSION"
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git checkout -b "$BRANCH"
+          git commit -am "Changelog update - $VERSION"
+          git push --set-upstream origin "$BRANCH"
+          gh pr create \
+            --title "Changelog update - \`$VERSION\`" \
+            --body "Moves the \`$VERSION\` release notes out of \`[Unreleased]\`." \
+            --head "$BRANCH"

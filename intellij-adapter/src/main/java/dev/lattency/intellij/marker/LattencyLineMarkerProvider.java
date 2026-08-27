@@ -14,6 +14,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiIdentifier;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
+import com.intellij.psi.PsiNewExpression;
 import com.intellij.psi.search.GlobalSearchScope;
 import dev.lattency.core.ChainStep;
 import dev.lattency.core.MethodColoring;
@@ -56,7 +57,20 @@ public final class LattencyLineMarkerProvider extends RelatedItemLineMarkerProvi
                     && identifier.getParent() instanceof PsiMethod method) {
                 collectDeclarationMarker(identifier, method, result);
             } else if (element instanceof PsiMethodCallExpression call) {
-                collectCallSite(call, chainsPerLine, anchorPerLine);
+                collectCallSite(
+                        call.getMethodExpression().getReferenceNameElement(),
+                        IoColoringAnalyzer.chainsForCall(call),
+                        chainsPerLine,
+                        anchorPerLine);
+            } else if (element instanceof PsiNewExpression construction) {
+                collectCallSite(
+                        // Leaf element only, per LineMarkerProvider's contract.
+                        construction.getClassReference() == null
+                                ? null
+                                : construction.getClassReference().getReferenceNameElement(),
+                        IoColoringAnalyzer.chainsForConstruction(construction),
+                        chainsPerLine,
+                        anchorPerLine);
             }
         }
         for (Map.Entry<CallLine, List<SinkChain>> entry : chainsPerLine.entrySet()) {
@@ -81,19 +95,15 @@ public final class LattencyLineMarkerProvider extends RelatedItemLineMarkerProvi
     }
 
     private static void collectCallSite(
-            PsiMethodCallExpression call,
+            @Nullable PsiElement anchor,
+            List<SinkChain> chains,
             Map<CallLine, List<SinkChain>> chainsPerLine,
             Map<CallLine, PsiElement> anchorPerLine) {
-        PsiElement anchor = call.getMethodExpression().getReferenceNameElement();
-        if (anchor == null) {
+        if (anchor == null || chains.isEmpty()) {
             return;
         }
         CallLine line = CallLine.of(anchor);
         if (line == null) {
-            return;
-        }
-        List<SinkChain> chains = IoColoringAnalyzer.chainsForCall(call);
-        if (chains.isEmpty()) {
             return;
         }
         chainsPerLine.computeIfAbsent(line, ignored -> new ArrayList<>()).addAll(chains);
@@ -167,6 +177,12 @@ public final class LattencyLineMarkerProvider extends RelatedItemLineMarkerProvi
             }
             return new CallLine(file, document.getLineNumber(element.getTextOffset()));
         }
+    }
+
+    @Override
+    public @NotNull String getId() {
+        // Persisted key for the Gutter Icons preference: keep stable across refactorings.
+        return "lattency.io";
     }
 
     @Override

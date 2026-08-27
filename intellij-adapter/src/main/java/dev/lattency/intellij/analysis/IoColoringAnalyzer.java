@@ -4,18 +4,21 @@ import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.util.Getter;
 import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.UserDataHolderEx;
+import com.intellij.psi.JavaRecursiveElementWalkingVisitor;
 import com.intellij.psi.PsiAnnotation;
 import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiJavaCodeReferenceElement;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.PsiMethodCallExpression;
 import com.intellij.psi.PsiModifier;
+import com.intellij.psi.PsiNewExpression;
 import com.intellij.psi.search.GlobalSearchScope;
 import com.intellij.psi.search.searches.OverridingMethodsSearch;
 import com.intellij.psi.util.CachedValue;
 import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
-import com.intellij.psi.util.PsiTreeUtil;
 import dev.lattency.core.BuiltInSinks;
 import dev.lattency.core.ChainStep;
 import dev.lattency.core.IoCategory;
@@ -25,20 +28,23 @@ import dev.lattency.core.SinkFacts;
 import dev.lattency.core.SinkMatcher;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Computes the transitive I/O coloring of Java methods.
  *
  * <p>Per-method results are cached with {@link CachedValuesManager}, invalidated on any
  * physical PSI change and on lattency.yml changes. Each cached result comes from a
- * self-contained walk that is depth-limited by the configured budget and cycle-safe
- * through a per-walk visited set. Walks reuse already-cached callee results by peeking
- * ({@link CachedValue#getUpToDateOrNull()}) — never by computing a nested cached value,
- * which would trip the platform's recursion prevention on cyclic code.
+ * self-contained {@link Walk} that is depth-limited by the configured budget and
+ * cycle-safe through a per-walk path set. Walks reuse already-cached callee results by
+ * peeking ({@link CachedValue#getUpToDateOrNull()}) - never by computing a nested cached
+ * value, which would trip the platform's recursion prevention on cyclic code.
  */
 public final class IoColoringAnalyzer {
     private static final Key<CachedValue<MethodColoring>> COLORING =
@@ -54,11 +60,10 @@ public final class IoColoringAnalyzer {
                     () -> {
                         LattencyConfigService service =
                                 LattencyConfigService.getInstance(method.getProject());
-                        Set<PsiMethod> visited = new HashSet<>();
-                        visited.add(method);
+                        Walk walk = new Walk(service.matcher());
+                        walk.path.add(method);
                         return CachedValueProvider.Result.create(
-                                walk(method, service.matcher(),
-                                        service.config().depth(), visited),
+                                walk(method, walk, service.config().depth()),
                                 PsiModificationTracker.MODIFICATION_COUNT,
                                 service.tracker());
                     }, false);
@@ -74,50 +79,65 @@ public final class IoColoringAnalyzer {
             return List.of();
         }
         LattencyConfigService service = LattencyConfigService.getInstance(call.getProject());
-        return chainsForCallee(
-                callee, service.matcher(), service.config().depth(), new HashSet<>());
+        return chainsForCallee(callee, new Walk(service.matcher()), service.config().depth());
     }
 
-    private static MethodColoring walk(
-            PsiMethod method, SinkMatcher matcher, int budget, Set<PsiMethod> visited) {
+    /** Chains contributed by one instantiation, as seen from the enclosing method. */
+    public static List<SinkChain> chainsForConstruction(PsiNewExpression construction) {
+        LattencyConfigService service =
+                LattencyConfigService.getInstance(construction.getProject());
+        return chainsForConstruction(
+                construction, new Walk(service.matcher()), service.config().depth());
+    }
+
+    private static MethodColoring walk(PsiMethod method, Walk walk, int budget) {
         ProgressManager.checkCanceled();
         PsiClass containingClass = method.getContainingClass();
         if (containingClass == null
                 || containingClass.getQualifiedName() == null
-                || matcher.isExcluded(containingClass.getQualifiedName())
+                || walk.matcher.isExcluded(containingClass.getQualifiedName())
                 || hasAnnotation(method, BuiltInSinks.NON_BLOCKING)) {
             return MethodColoring.uncolored();
         }
 
         List<SinkChain> chains = new ArrayList<>();
         String classFqn = containingClass.getQualifiedName();
-        matchMethod(method, matcher).ifPresent(category -> chains.add(new SinkChain(
+        matchTarget(method, walk.matcher).ifPresent(category -> chains.add(new SinkChain(
                 category, List.of(new ChainStep(classFqn, method.getName(), false)))));
 
         if (method.getBody() != null) {
-            for (PsiMethodCallExpression call : PsiTreeUtil.findChildrenOfType(
-                    method.getBody(), PsiMethodCallExpression.class)) {
-                ProgressManager.checkCanceled();
-                PsiMethod callee = call.resolveMethod();
-                if (callee != null) {
-                    chains.addAll(chainsForCallee(callee, matcher, budget, visited));
+            method.getBody().accept(new JavaRecursiveElementWalkingVisitor() {
+                @Override
+                public void visitMethodCallExpression(PsiMethodCallExpression call) {
+                    super.visitMethodCallExpression(call);
+                    ProgressManager.checkCanceled();
+                    PsiMethod callee = call.resolveMethod();
+                    if (callee != null) {
+                        chains.addAll(chainsForCallee(callee, walk, budget));
+                    }
                 }
-            }
+
+                @Override
+                public void visitNewExpression(PsiNewExpression construction) {
+                    super.visitNewExpression(construction);
+                    ProgressManager.checkCanceled();
+                    chains.addAll(chainsForConstruction(construction, walk, budget));
+                }
+            });
         }
         return MethodColoring.of(chains);
     }
 
-    private static List<SinkChain> chainsForCallee(
-            PsiMethod callee, SinkMatcher matcher, int budget, Set<PsiMethod> visited) {
+    private static List<SinkChain> chainsForCallee(PsiMethod callee, Walk walk, int budget) {
         if (hasAnnotation(callee, BuiltInSinks.NON_BLOCKING)) {
             return List.of();
         }
         List<SinkChain> chains = new ArrayList<>();
-        if (terminalEdge(callee, matcher, chains)) {
+        if (terminalEdge(callee, walk.matcher, chains)) {
             return chains;
         }
         if (!callee.hasModifierProperty(PsiModifier.ABSTRACT)) {
-            chains.addAll(walkInto(callee, matcher, budget, visited));
+            chains.addAll(walkInto(callee, walk, budget));
             return chains;
         }
         // A call through an interface or abstract method may land in any project
@@ -127,17 +147,60 @@ public final class IoColoringAnalyzer {
                 .findAll()) {
             ProgressManager.checkCanceled();
             if (hasAnnotation(implementation, BuiltInSinks.NON_BLOCKING)
-                    || terminalEdge(implementation, matcher, chains)) {
+                    || terminalEdge(implementation, walk.matcher, chains)) {
                 continue;
             }
-            chains.addAll(walkInto(implementation, matcher, budget, visited));
+            chains.addAll(walkInto(implementation, walk, budget));
         }
         return chains;
     }
 
     /**
+     * Chains contributed by {@code new X(..)}: either X's construction is itself a sink,
+     * or X is project code whose constructor body is walked like any other callee.
+     */
+    private static List<SinkChain> chainsForConstruction(
+            PsiNewExpression construction, Walk walk, int budget) {
+        PsiClass instantiated = resolveInstantiatedClass(construction);
+        if (instantiated == null || instantiated.getQualifiedName() == null) {
+            return List.of();
+        }
+        String classFqn = instantiated.getQualifiedName();
+        PsiMethod constructor = construction.resolveConstructor();
+        if (constructor != null && hasAnnotation(constructor, BuiltInSinks.NON_BLOCKING)) {
+            return List.of();
+        }
+
+        Set<String> annotations = annotationNames(instantiated.getAnnotations());
+        if (constructor != null) {
+            annotations.addAll(annotationNames(constructor.getAnnotations()));
+        }
+        Optional<IoCategory> sink = walk.matcher.match(SinkFacts.ofConstruction(
+                classFqn, supertypeNames(instantiated), annotations));
+        if (sink.isPresent()) {
+            return List.of(new SinkChain(sink.get(), List.of(new ChainStep(
+                    classFqn, instantiated.getName() == null ? classFqn : instantiated.getName(),
+                    false))));
+        }
+        return constructor == null ? List.of() : walkInto(constructor, walk, budget);
+    }
+
+    private static @Nullable PsiClass resolveInstantiatedClass(PsiNewExpression construction) {
+        PsiMethod constructor = construction.resolveConstructor();
+        if (constructor != null && constructor.getContainingClass() != null) {
+            return constructor.getContainingClass();
+        }
+        PsiJavaCodeReferenceElement reference = construction.getClassReference();
+        if (reference == null) {
+            return null;
+        }
+        PsiElement resolved = reference.resolve();
+        return resolved instanceof PsiClass psiClass ? psiClass : null;
+    }
+
+    /**
      * Handles edges that never recurse: sinks (one-step chain) and callees behind a
-     * caching annotation (conditional one-step chain — the body may be skipped on a
+     * caching annotation (conditional one-step chain - the body may be skipped on a
      * cache hit, so the walk stops and the underlying category stays unknown).
      * Returns true when the edge was terminal.
      */
@@ -148,7 +211,7 @@ public final class IoColoringAnalyzer {
             return true;
         }
         String classFqn = targetClass.getQualifiedName();
-        Optional<IoCategory> sink = matchMethod(target, matcher);
+        Optional<IoCategory> sink = matchTarget(target, matcher);
         if (sink.isPresent()) {
             chains.add(new SinkChain(
                     sink.get(), List.of(new ChainStep(classFqn, target.getName(), false))));
@@ -163,15 +226,14 @@ public final class IoColoringAnalyzer {
     }
 
     /** Chains through a project method: cached result if available, else a sub-walk. */
-    private static List<SinkChain> walkInto(
-            PsiMethod target, SinkMatcher matcher, int budget, Set<PsiMethod> visited) {
+    private static List<SinkChain> walkInto(PsiMethod target, Walk walk, int budget) {
         PsiClass targetClass = target.getContainingClass();
         if (targetClass == null || targetClass.getQualifiedName() == null
-                || matcher.isExcluded(targetClass.getQualifiedName())
+                || walk.matcher.isExcluded(targetClass.getQualifiedName())
                 || !target.getManager().isInProject(target)) {
             return List.of();
         }
-        MethodColoring coloring = cachedOrSubWalk(target, matcher, budget, visited);
+        MethodColoring coloring = cachedOrSubWalk(target, walk, budget);
         if (coloring == null || !coloring.isColored()) {
             return List.of();
         }
@@ -186,8 +248,8 @@ public final class IoColoringAnalyzer {
         return chains;
     }
 
-    private static MethodColoring cachedOrSubWalk(
-            PsiMethod target, SinkMatcher matcher, int budget, Set<PsiMethod> visited) {
+    private static @Nullable MethodColoring cachedOrSubWalk(
+            PsiMethod target, Walk walk, int budget) {
         CachedValue<MethodColoring> cached = target.getUserData(COLORING);
         if (cached != null) {
             Getter<MethodColoring> upToDate = cached.getUpToDateOrNull();
@@ -195,28 +257,46 @@ public final class IoColoringAnalyzer {
                 return upToDate.get();
             }
         }
-        if (budget == 0 || !visited.add(target)) {
-            return null; // Depth limit reached, or a cycle back into the current walk.
+        MethodColoring memoized = walk.recall(target, budget);
+        if (memoized != null) {
+            return memoized;
         }
+        if (budget == 0) {
+            return null; // Depth limit reached.
+        }
+        if (!walk.path.add(target)) {
+            walk.cycleCuts++;
+            return null; // A cycle back into the current walk.
+        }
+        int cutsBeforeSubtree = walk.cycleCuts;
         try {
-            return walk(target, matcher, budget - 1, visited);
+            MethodColoring result = walk(target, walk, budget - 1);
+            if (walk.cycleCuts == cutsBeforeSubtree) {
+                walk.remember(target, budget, result);
+            }
+            return result;
         } finally {
-            visited.remove(target);
+            walk.path.remove(target);
         }
     }
 
-    private static Optional<IoCategory> matchMethod(PsiMethod method, SinkMatcher matcher) {
+    /**
+     * Matches a method against the sink rules as its own declaration. Constructors are
+     * matched as construction, not as calls: {@code java.io.File} is a sink because its
+     * methods touch the filesystem, but {@code new File(name)} touches nothing.
+     */
+    private static Optional<IoCategory> matchTarget(PsiMethod method, SinkMatcher matcher) {
         PsiClass containingClass = method.getContainingClass();
         if (containingClass == null || containingClass.getQualifiedName() == null) {
             return Optional.empty();
         }
         Set<String> annotations = annotationNames(method.getAnnotations());
         annotations.addAll(annotationNames(containingClass.getAnnotations()));
-        return matcher.match(new SinkFacts(
-                containingClass.getQualifiedName(),
-                supertypeNames(containingClass),
-                method.getName(),
-                annotations));
+        String classFqn = containingClass.getQualifiedName();
+        Set<String> supertypes = supertypeNames(containingClass);
+        return matcher.match(method.isConstructor()
+                ? SinkFacts.ofConstruction(classFqn, supertypes, annotations)
+                : SinkFacts.ofCall(classFqn, supertypes, method.getName(), annotations));
     }
 
     private static boolean hasCachingAnnotation(PsiMethod method, PsiClass containingClass) {
@@ -264,5 +344,45 @@ public final class IoColoringAnalyzer {
             }
         }
         return false;
+    }
+
+    /**
+     * State of one depth-limited walk.
+     *
+     * <p>{@code path} makes the walk cycle-safe; {@code memo} makes it cheap. Without the
+     * memo, a call graph that fans out and re-converges (the common shape: several methods
+     * of a service delegating to the same helpers) re-derives every shared subtree once per
+     * path reaching it, which is exponential in the depth limit.
+     *
+     * <p>A memoized result is reused for any budget at or below the one it was computed
+     * with: {@link MethodColoring} keeps only the shortest chain per category, so a chain
+     * missing from a deeper walk cannot exist in a shallower one, and {@link #walkInto}
+     * drops the chains that are now too deep. Results are memoized only when no cycle was
+     * cut while computing them - a cut result depends on which methods were on the path,
+     * so it is not reusable elsewhere in the walk.
+     */
+    private static final class Walk {
+        private final SinkMatcher matcher;
+        private final Set<PsiMethod> path = new HashSet<>();
+        private final Map<PsiMethod, Memo> memo = new HashMap<>();
+        private int cycleCuts;
+
+        private Walk(SinkMatcher matcher) {
+            this.matcher = matcher;
+        }
+
+        private @Nullable MethodColoring recall(PsiMethod method, int budget) {
+            Memo remembered = memo.get(method);
+            return remembered != null && remembered.budget >= budget ? remembered.coloring : null;
+        }
+
+        private void remember(PsiMethod method, int budget, MethodColoring coloring) {
+            Memo remembered = memo.get(method);
+            if (remembered == null || remembered.budget < budget) {
+                memo.put(method, new Memo(budget, coloring));
+            }
+        }
+
+        private record Memo(int budget, MethodColoring coloring) {}
     }
 }

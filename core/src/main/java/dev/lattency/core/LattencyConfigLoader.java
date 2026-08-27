@@ -56,9 +56,12 @@ public final class LattencyConfigLoader {
             } else if (match.size() == 1 && match.containsKey("annotation")) {
                 sinks.add(SinkDefinition.annotation(
                         requireString(match.get("annotation"), "annotation"), category));
+            } else if (match.size() == 1 && match.containsKey("construction")) {
+                sinks.add(SinkDefinition.construction(
+                        requireString(match.get("construction"), "construction"), category));
             } else {
                 throw new IllegalArgumentException("A sink match must contain package, class, "
-                        + "class + method, or annotation");
+                        + "class + method, annotation, or construction");
             }
         }
 

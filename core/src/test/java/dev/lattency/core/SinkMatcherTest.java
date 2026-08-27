@@ -26,14 +26,14 @@ class SinkMatcherTest {
         assertEquals(IoCategory.MESSAGING, configured.match(facts("example.Bus", "send")).orElseThrow());
         assertEquals(
                 IoCategory.GENERIC,
-                configured.match(new SinkFacts("example.Work", Set.of(), "run", Set.of("example.Blocking")))
+                configured.match(SinkFacts.ofCall("example.Work", Set.of(), "run", Set.of("example.Blocking")))
                         .orElseThrow());
     }
 
     @Test
     void matchesSpringDataOnlyThroughSupertypeFacts() {
         assertTrue(matcher.match(facts("example.OrderRepository", "save")).isEmpty());
-        var facts = new SinkFacts(
+        var facts = SinkFacts.ofCall(
                 "example.OrderRepository",
                 Set.of(BuiltInSinks.SPRING_DATA_REPOSITORY),
                 "save",
@@ -53,7 +53,7 @@ class SinkMatcherTest {
 
     @Test
     void matchesJdbcImplementationsThroughApiSupertypes() {
-        var facts = new SinkFacts(
+        var facts = SinkFacts.ofCall(
                 "com.zaxxer.hikari.pool.HikariProxyConnection",
                 Set.of("java.sql.Connection"),
                 "commit",
@@ -69,7 +69,36 @@ class SinkMatcherTest {
         assertTrue(configured.match(facts("java.nio.file.Files", "readString")).isEmpty());
     }
 
+    @Test
+    void constructionMatchesOnlyConstructionRules() {
+        // Opening a stream is the file access...
+        assertEquals(
+                IoCategory.FILE,
+                matcher.match(SinkFacts.ofConstruction("java.io.FileInputStream", Set.of(), Set.of()))
+                        .orElseThrow());
+        // ...but merely naming a file, or wrapping an existing reader, is not.
+        assertTrue(matcher.match(SinkFacts.ofConstruction("java.io.File", Set.of(), Set.of())).isEmpty());
+        assertTrue(
+                matcher.match(SinkFacts.ofConstruction("java.io.BufferedReader", Set.of(), Set.of()))
+                        .isEmpty());
+        // A type-shaped rule describes an API surface, so it must not fire on construction:
+        // new ProducerRecord<>(..) is not a message being published.
+        assertTrue(
+                matcher.match(SinkFacts.ofConstruction(
+                                "org.apache.kafka.clients.producer.ProducerRecord", Set.of(), Set.of()))
+                        .isEmpty());
+    }
+
+    @Test
+    void annotationRulesApplyToConstructorsToo() {
+        assertEquals(
+                IoCategory.GENERIC,
+                matcher.match(SinkFacts.ofConstruction(
+                                "example.Work", Set.of(), Set.of(BuiltInSinks.BLOCKING)))
+                        .orElseThrow());
+    }
+
     private static SinkFacts facts(String className, String methodName) {
-        return new SinkFacts(className, Set.of(), methodName, Set.of());
+        return SinkFacts.ofCall(className, Set.of(), methodName, Set.of());
     }
 }

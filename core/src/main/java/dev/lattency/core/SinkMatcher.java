@@ -31,14 +31,24 @@ public final class SinkMatcher {
     }
 
     private static boolean matches(SinkDefinition definition, SinkFacts facts) {
+        boolean construction = facts.target() == SinkFacts.Target.CONSTRUCTION;
         return switch (definition.kind()) {
-            case PACKAGE_PREFIX -> facts.containingClassFqn().equals(definition.pattern())
-                    || facts.containingClassFqn().startsWith(definition.pattern() + ".");
-            case CLASS -> facts.containingClassFqn().equals(definition.pattern());
-            case METHOD -> facts.containingClassFqn().equals(definition.pattern())
+            // Type-shaped rules describe an API surface; constructing the type is not
+            // calling it (see SinkFacts).
+            case PACKAGE_PREFIX -> !construction
+                    && (facts.containingClassFqn().equals(definition.pattern())
+                            || facts.containingClassFqn().startsWith(definition.pattern() + "."));
+            case CLASS -> !construction
+                    && facts.containingClassFqn().equals(definition.pattern());
+            case METHOD -> !construction
+                    && facts.containingClassFqn().equals(definition.pattern())
                     && facts.methodName().equals(definition.methodName());
+            case SUPERTYPE -> !construction
+                    && facts.supertypeFqns().contains(definition.pattern());
+            // Annotations name the target itself, so they apply to constructors too.
             case ANNOTATION -> facts.annotationFqns().contains(definition.pattern());
-            case SUPERTYPE -> facts.supertypeFqns().contains(definition.pattern());
+            case CONSTRUCTION -> construction
+                    && facts.containingClassFqn().equals(definition.pattern());
         };
     }
 }

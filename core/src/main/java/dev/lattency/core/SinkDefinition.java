@@ -38,11 +38,17 @@ public record SinkDefinition(Kind kind, String pattern, String methodName, IoCat
         return new SinkDefinition(Kind.SUPERTYPE, supertypeFqn, null, category);
     }
 
+    /** Matches {@code new <fqn>(...)} - for types whose construction is itself the I/O. */
+    public static SinkDefinition construction(String classFqn, IoCategory category) {
+        return new SinkDefinition(Kind.CONSTRUCTION, classFqn, null, category);
+    }
+
     public enum Kind {
         PACKAGE_PREFIX,
         CLASS,
         METHOD,
         ANNOTATION,
-        SUPERTYPE
+        SUPERTYPE,
+        CONSTRUCTION
     }
 }

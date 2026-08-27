@@ -4,29 +4,47 @@ import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.ModificationTracker;
+import com.intellij.openapi.util.SimpleModificationTracker;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.newvfs.BulkFileListener;
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
+import com.intellij.openapi.vfs.newvfs.events.VFileMoveEvent;
+import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent;
 import dev.lattency.core.LattencyConfig;
 import dev.lattency.core.LattencyConfigLoader;
 import dev.lattency.core.SinkMatcher;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
+import java.util.List;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Project-level access to the parsed {@code lattency.yml}. Exposes a
- * {@link ModificationTracker} that advances whenever the file on disk changes, so
- * cached analysis results can depend on the configuration without IDE restarts.
+ * {@link ModificationTracker} that advances whenever the file changes, so cached
+ * analysis results can depend on the configuration without IDE restarts.
+ *
+ * <p>The tracker is driven by VFS events rather than by stat-ing the file on demand:
+ * cached-value dependencies are validated on every access, so an on-demand stat would
+ * put a blocking filesystem call on the highlighting path once per method per pass.
  */
 @Service(Service.Level.PROJECT)
 public final class LattencyConfigService {
+    public static final String CONFIG_FILE_NAME = "lattency.yml";
+
     private static final Logger LOG = Logger.getInstance(LattencyConfigService.class);
 
-    private final Project project;
-    private final ConfigFileTracker tracker = new ConfigFileTracker();
-    private volatile Snapshot snapshot;
+    private final @Nullable Path configPath;
+    private final SimpleModificationTracker tracker = new SimpleModificationTracker();
+    private volatile @Nullable Snapshot snapshot;
 
     public LattencyConfigService(Project project) {
-        this.project = project;
+        String basePath = project.getBasePath();
+        configPath = basePath == null ? null : Path.of(basePath, CONFIG_FILE_NAME);
+        if (configPath != null) {
+            String watched = configPath.toString();
+            project.getMessageBus().connect().subscribe(
+                    VirtualFileManager.VFS_CHANGES, new ConfigFileWatcher(watched));
+        }
     }
 
     public static LattencyConfigService getInstance(Project project) {
@@ -50,54 +68,46 @@ public final class LattencyConfigService {
         long version = tracker.getModificationCount();
         Snapshot local = snapshot;
         if (local == null || local.version != version) {
-            LattencyConfig config = load();
+            LattencyConfig config = configPath == null
+                    ? LattencyConfig.defaultsOnly()
+                    : LattencyConfigLoader.load(configPath, LOG::warn);
             local = new Snapshot(version, config, new SinkMatcher(config));
             snapshot = local;
         }
         return local;
     }
 
-    private LattencyConfig load() {
-        Path path = configPath();
-        if (path == null) {
-            return LattencyConfig.defaultsOnly();
-        }
-        return LattencyConfigLoader.load(path, LOG::warn);
-    }
-
-    private Path configPath() {
-        String basePath = project.getBasePath();
-        return basePath == null ? null : Path.of(basePath, "lattency.yml");
-    }
-
     private record Snapshot(long version, LattencyConfig config, SinkMatcher matcher) {}
 
-    private final class ConfigFileTracker implements ModificationTracker {
-        private long knownStamp = Long.MIN_VALUE;
-        private long version;
+    private final class ConfigFileWatcher implements BulkFileListener {
+        private final String watchedPath;
 
-        @Override
-        public synchronized long getModificationCount() {
-            long stamp = currentStamp();
-            if (stamp != knownStamp) {
-                knownStamp = stamp;
-                version++;
-            }
-            return version;
+        private ConfigFileWatcher(String watchedPath) {
+            this.watchedPath = watchedPath;
         }
 
-        private long currentStamp() {
-            Path path = configPath();
-            if (path == null) {
-                return -1;
+        @Override
+        public void after(@NotNull List<? extends @NotNull VFileEvent> events) {
+            for (VFileEvent event : events) {
+                if (touchesConfig(event)) {
+                    tracker.incModificationCount();
+                    return;
+                }
             }
-            try {
-                BasicFileAttributes attributes =
-                        Files.readAttributes(path, BasicFileAttributes.class);
-                return attributes.lastModifiedTime().toMillis() * 31 + attributes.size();
-            } catch (IOException missingOrUnreadable) {
-                return -1;
+        }
+
+        private boolean touchesConfig(VFileEvent event) {
+            if (watchedPath.equals(event.getPath())) {
+                return true;
             }
+            // A rename or move away from lattency.yml also changes the effective config.
+            if (event instanceof VFilePropertyChangeEvent renamed) {
+                return watchedPath.equals(renamed.getOldPath());
+            }
+            if (event instanceof VFileMoveEvent moved) {
+                return watchedPath.equals(moved.getOldPath());
+            }
+            return false;
         }
     }
 }

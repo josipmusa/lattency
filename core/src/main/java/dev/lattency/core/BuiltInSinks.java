@@ -55,6 +55,14 @@ public final class BuiltInSinks {
             SinkDefinition.className("java.io.BufferedReader", IoCategory.FILE),
             SinkDefinition.className("java.io.BufferedWriter", IoCategory.FILE),
             SinkDefinition.className("java.io.RandomAccessFile", IoCategory.FILE),
+            // Opening one of these IS the file access; the constructor is the sink.
+            // java.io.File and the Buffered* wrappers are deliberately absent: their
+            // constructors touch nothing, only their methods do.
+            SinkDefinition.construction("java.io.FileInputStream", IoCategory.FILE),
+            SinkDefinition.construction("java.io.FileOutputStream", IoCategory.FILE),
+            SinkDefinition.construction("java.io.FileReader", IoCategory.FILE),
+            SinkDefinition.construction("java.io.FileWriter", IoCategory.FILE),
+            SinkDefinition.construction("java.io.RandomAccessFile", IoCategory.FILE),
             SinkDefinition.annotation(BLOCKING, IoCategory.GENERIC));
 
     private BuiltInSinks() {}

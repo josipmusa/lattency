@@ -3,6 +3,7 @@ package dev.lattency.intellij.marker;
 import com.intellij.codeInsight.daemon.GutterMark;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import dev.lattency.intellij.LattencyIcons;
 import java.io.IOException;
@@ -19,7 +20,9 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
         try {
             String basePath = getProject().getBasePath();
             if (basePath != null) {
-                Files.deleteIfExists(Path.of(basePath, "lattency.yml"));
+                Path config = Path.of(basePath, "lattency.yml");
+                Files.deleteIfExists(config);
+                refreshConfigInVfs(config);
             }
         } finally {
             super.tearDown();
@@ -404,6 +407,141 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
         assertSize(1, declarationMarkers());
     }
 
+    public void testOpeningAFileStreamIsAFileSink() {
+        addFileStreams();
+
+        GutterMark marker = singleDeclarationMarker("""
+                package example;
+                class Example {
+                    void open(String name) throws java.io.IOException {
+                        new java.io.FileInputStream(name);
+                    }
+                }
+                """);
+
+        assertSame(LattencyIcons.FILE, marker.getIcon());
+        assertTooltip(marker, "open", "FileInputStream", "[FILE]");
+    }
+
+    public void testNamingAFileOrWrappingAReaderIsNotASink() {
+        addFileStreams();
+        configure("""
+                package example;
+                class Example {
+                    void describe(String name, java.io.FileReader reader) {
+                        new java.io.File(name);
+                        new java.io.BufferedReader(reader);
+                    }
+                }
+                """);
+
+        assertEmpty(declarationMarkers());
+    }
+
+    public void testConstructionPropagatesThroughProjectConstructors() {
+        addFileStreams();
+        myFixture.addClass("""
+                package example;
+                public class Log {
+                    public Log(String name) throws java.io.IOException {
+                        new java.io.FileWriter(name);
+                    }
+                }
+                """);
+
+        GutterMark marker = singleDeclarationMarker("""
+                package example;
+                class Example {
+                    void start(String name) throws java.io.IOException {
+                        new Log(name);
+                    }
+                }
+                """);
+
+        assertSame(LattencyIcons.FILE_TRANSITIVE, marker.getIcon());
+        assertTooltip(marker, "start", "Log.Log", "FileWriter", "[FILE]");
+    }
+
+    public void testCustomConstructionSinkFromYaml() throws IOException {
+        writeConfig("""
+                sinks:
+                  - match:
+                      construction: example.Connection
+                    category: DB
+                """);
+        myFixture.addClass("package example; public class Connection { public Connection(String url) {} }");
+
+        GutterMark marker = singleDeclarationMarker("""
+                package example;
+                class Example {
+                    void connect() { new Connection("jdbc:x"); }
+                }
+                """);
+
+        assertSame(LattencyIcons.DB, marker.getIcon());
+        assertTooltip(marker, "Connection", "[DB]");
+    }
+
+    /**
+     * A call graph that fans out and re-converges. Without memoization inside a walk,
+     * every shared subtree is re-derived once per path reaching it, which is exponential
+     * in the depth limit: this shape took over half a second per method to color.
+     */
+    public void testWideFanOutStaysFast() {
+        addFileApi();
+        int layers = 4;
+        int width = 12;
+        StringBuilder source = new StringBuilder("package example;\nclass Fan {\n");
+        source.append("  java.nio.file.Path path;\n  void top() {");
+        for (int w = 0; w < width; w++) {
+            source.append(" L0_").append(w).append("();");
+        }
+        source.append(" }\n");
+        for (int layer = 0; layer < layers; layer++) {
+            for (int w = 0; w < width; w++) {
+                source.append("  void L").append(layer).append("_").append(w).append("() {");
+                if (layer == layers - 1) {
+                    source.append(" java.nio.file.Files.readString(path);");
+                } else {
+                    for (int next = 0; next < width; next++) {
+                        source.append(" L").append(layer + 1).append("_").append(next).append("();");
+                    }
+                }
+                source.append(" }\n");
+            }
+        }
+        source.append("}\n");
+        configure(source.toString());
+
+        long start = System.nanoTime();
+        List<GutterMark> markers = declarationMarkers();
+        long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+
+        assertNotEmpty(markers);
+        assertTrue(
+                "Coloring a " + width + "-wide, " + layers + "-deep fan-out took "
+                        + elapsedMillis + "ms; the walk is re-deriving shared subtrees",
+                elapsedMillis < 2_000);
+    }
+
+    private void addFileStreams() {
+        myFixture.addClass("package java.io; public class IOException extends Exception {}");
+        myFixture.addClass("package java.io; public class File { public File(String name) {} }");
+        myFixture.addClass("""
+                package java.io;
+                public class FileInputStream { public FileInputStream(String name) throws IOException {} }
+                """);
+        myFixture.addClass("""
+                package java.io;
+                public class FileWriter { public FileWriter(String name) throws IOException {} }
+                """);
+        myFixture.addClass("package java.io; public class FileReader {}");
+        myFixture.addClass("""
+                package java.io;
+                public class BufferedReader { public BufferedReader(FileReader reader) {} }
+                """);
+    }
+
     private GutterMark singleDeclarationMarker(String source) {
         configure(source);
         List<GutterMark> markers = declarationMarkers();
@@ -480,11 +618,23 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
                                 + markers.stream().map(GutterMark::getTooltipText).toList()));
     }
 
+    /**
+     * Writes the project config and refreshes the VFS, the way the IDE does when it
+     * regains focus after an external edit. Lattency reloads the file from VFS events,
+     * so a write the VFS has not seen yet is deliberately not picked up.
+     */
     private void writeConfig(String yaml) throws IOException {
         String basePath = getProject().getBasePath();
         assertNotNull(basePath);
         Files.createDirectories(Path.of(basePath));
-        Files.writeString(Path.of(basePath, "lattency.yml"), yaml);
+        Path config = Path.of(basePath, "lattency.yml");
+        Files.writeString(config, yaml);
+        refreshConfigInVfs(config);
+    }
+
+    private static void refreshConfigInVfs(Path config) {
+        LocalFileSystem.getInstance().refreshAndFindFileByNioFile(config);
+        LocalFileSystem.getInstance().refreshIoFiles(List.of(config.toFile()));
     }
 
     private static void assertTooltip(GutterMark marker, String... fragments) {

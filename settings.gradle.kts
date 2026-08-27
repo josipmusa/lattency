@@ -7,6 +7,9 @@ pluginManagement {
         gradlePluginPortal()
         mavenCentral()
     }
+    plugins {
+        id("org.jetbrains.changelog") version "2.5.0"
+    }
 }
 
 plugins {
