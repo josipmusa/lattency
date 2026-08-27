@@ -91,10 +91,10 @@ responsive and markers update on edit without IDE restart.
 
 - [x] All milestone-1 acceptance items still pass (regression).
 - [x] All flipped and new tests green; `./gradlew build` green.
-- [ ] Sandbox on test-fixtures: chains, conditional, conservative-OR, cycle, depth
+- [x] Sandbox on test-fixtures: chains, conditional, conservative-OR, cycle, depth
   cap, and call-site markers all verified by eye; tooltips correct; chain
   navigation works.
-- [ ] Edit test at the BOTTOM of a chain updates markers at the TOP without restart.
+- [x] Edit test at the BOTTOM of a chain updates markers at the TOP without restart.
 - [x] Typing in the 200-method fixture file shows no perceptible lag; no Lattency
   exceptions in idea.log after the session.
 - [ ] Real-project check: open a recent Aevon PR branch, confirm at least one
