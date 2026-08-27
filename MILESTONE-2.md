@@ -95,7 +95,7 @@ responsive and markers update on edit without IDE restart.
   cap, and call-site markers all verified by eye; tooltips correct; chain
   navigation works.
 - [ ] Edit test at the BOTTOM of a chain updates markers at the TOP without restart.
-- [ ] Typing in the 200-method fixture file shows no perceptible lag; no Lattency
+- [x] Typing in the 200-method fixture file shows no perceptible lag; no Lattency
   exceptions in idea.log after the session.
 - [ ] Real-project check: open a recent Aevon PR branch, confirm at least one
   genuinely transitive marker is correct (hand-verify the chain), and note any

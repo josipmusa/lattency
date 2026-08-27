@@ -71,7 +71,10 @@ not be observed by eye. Outstanding acceptance items:
 2. Edit at the bottom of `TransitiveCallChainCase`, watch `topLevel`'s marker update
    without restart (covered by `testRemovingTheSinkAtTheBottomUpdatesMarkersUpTheChain`,
    still needs the manual edit-undo-edit pass).
-3. Typing responsiveness in `GeneratedMixedChains` (200 methods), then check
-   idea.log for Lattency exceptions.
+3. ~~Typing responsiveness in `GeneratedMixedChains` (200 methods), then check
+   idea.log for Lattency exceptions.~~ **Verified 2026-08-27**: typing felt smooth
+   by eye, and the sandbox log (`.intellijPlatform/sandbox/.../log/idea.log`) had
+   zero ERROR lines, zero Lattency stack frames, zero freeze thread dumps, and
+   EDT responsiveness reported ok.
 4. Open `JournalService.java` in aevon-service and confirm the predicted
    `updateDraft` transitive marker above; note any false positives here.
