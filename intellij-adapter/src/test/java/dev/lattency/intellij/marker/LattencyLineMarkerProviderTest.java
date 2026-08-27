@@ -4,8 +4,12 @@ import com.intellij.codeInsight.daemon.GutterMark;
 import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.openapi.vfs.VfsUtil;
+import com.intellij.psi.PsiClass;
+import com.intellij.psi.PsiMethod;
 import com.intellij.testFramework.fixtures.LightJavaCodeInsightFixtureTestCase;
 import dev.lattency.intellij.LattencyIcons;
+import dev.lattency.intellij.analysis.IoColoringAnalyzerTestBridge;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -483,11 +487,10 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
     }
 
     /**
-     * A call graph that fans out and re-converges. Without memoization inside a walk,
-     * every shared subtree is re-derived once per path reaching it, which is exponential
-     * in the depth limit: this shape took over half a second per method to color.
+     * A call graph that fans out and re-converges. Without the per-walk memo, shared
+     * subtrees are analyzed once for every path reaching them instead of once per method.
      */
-    public void testWideFanOutStaysFast() {
+    public void testReconvergingWalkAnalyzesEachMethodOnce() {
         addFileApi();
         int layers = 4;
         int width = 12;
@@ -513,15 +516,15 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
         source.append("}\n");
         configure(source.toString());
 
-        long start = System.nanoTime();
-        List<GutterMark> markers = declarationMarkers();
-        long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
+        PsiClass fan = myFixture.findClass("example.Fan");
+        PsiMethod[] topMethods = fan.findMethodsByName("top", false);
+        assertSize(1, topMethods);
 
-        assertNotEmpty(markers);
-        assertTrue(
-                "Coloring a " + width + "-wide, " + layers + "-deep fan-out took "
-                        + elapsedMillis + "ms; the walk is re-deriving shared subtrees",
-                elapsedMillis < 2_000);
+        IoColoringAnalyzerTestBridge.AnalysisResult analysis =
+                IoColoringAnalyzerTestBridge.analyzeWithoutPlatformCache(topMethods[0]);
+
+        assertTrue(analysis.colored());
+        assertEquals(1 + layers * width, analysis.analyzedMethodCount());
     }
 
     private void addFileStreams() {
@@ -633,8 +636,11 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
     }
 
     private static void refreshConfigInVfs(Path config) {
-        LocalFileSystem.getInstance().refreshAndFindFileByNioFile(config);
-        LocalFileSystem.getInstance().refreshIoFiles(List.of(config.toFile()));
+        var parent = LocalFileSystem.getInstance().refreshAndFindFileByNioFile(config.getParent());
+        if (parent == null) {
+            throw new AssertionError("Project directory is missing from the VFS: " + config.getParent());
+        }
+        VfsUtil.markDirtyAndRefresh(false, false, true, parent);
     }
 
     private static void assertTooltip(GutterMark marker, String... fragments) {

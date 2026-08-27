@@ -58,18 +58,27 @@ public final class IoColoringAnalyzer {
         if (cached == null) {
             cached = CachedValuesManager.getManager(method.getProject()).createCachedValue(
                     () -> {
-                        LattencyConfigService service =
-                                LattencyConfigService.getInstance(method.getProject());
-                        Walk walk = new Walk(service.matcher());
-                        walk.path.add(method);
                         return CachedValueProvider.Result.create(
-                                walk(method, walk, service.config().depth()),
+                                analyze(method, true).coloring(),
                                 PsiModificationTracker.MODIFICATION_COUNT,
-                                service.tracker());
+                                LattencyConfigService.getInstance(method.getProject()).tracker());
                     }, false);
             cached = ((UserDataHolderEx) method).putUserDataIfAbsent(COLORING, cached);
         }
         return cached.getValue();
+    }
+
+    /** Runs one self-contained walk without consulting per-method platform caches. */
+    static AnalysisSnapshot analyzeWithoutPlatformCache(PsiMethod method) {
+        return analyze(method, false);
+    }
+
+    private static AnalysisSnapshot analyze(PsiMethod method, boolean reusePlatformCache) {
+        LattencyConfigService service = LattencyConfigService.getInstance(method.getProject());
+        Walk walk = new Walk(service.matcher(), reusePlatformCache);
+        walk.path.add(method);
+        MethodColoring coloring = walk(method, walk, service.config().depth());
+        return new AnalysisSnapshot(coloring, walk.analyzedMethodCount);
     }
 
     /** Chains contributed by one call expression, as seen from the calling method. */
@@ -92,6 +101,7 @@ public final class IoColoringAnalyzer {
 
     private static MethodColoring walk(PsiMethod method, Walk walk, int budget) {
         ProgressManager.checkCanceled();
+        walk.analyzedMethodCount++;
         PsiClass containingClass = method.getContainingClass();
         if (containingClass == null
                 || containingClass.getQualifiedName() == null
@@ -250,11 +260,13 @@ public final class IoColoringAnalyzer {
 
     private static @Nullable MethodColoring cachedOrSubWalk(
             PsiMethod target, Walk walk, int budget) {
-        CachedValue<MethodColoring> cached = target.getUserData(COLORING);
-        if (cached != null) {
-            Getter<MethodColoring> upToDate = cached.getUpToDateOrNull();
-            if (upToDate != null) {
-                return upToDate.get();
+        if (walk.reusePlatformCache) {
+            CachedValue<MethodColoring> cached = target.getUserData(COLORING);
+            if (cached != null) {
+                Getter<MethodColoring> upToDate = cached.getUpToDateOrNull();
+                if (upToDate != null) {
+                    return upToDate.get();
+                }
             }
         }
         MethodColoring memoized = walk.recall(target, budget);
@@ -363,12 +375,19 @@ public final class IoColoringAnalyzer {
      */
     private static final class Walk {
         private final SinkMatcher matcher;
+        private final boolean reusePlatformCache;
         private final Set<PsiMethod> path = new HashSet<>();
         private final Map<PsiMethod, Memo> memo = new HashMap<>();
+        private int analyzedMethodCount;
         private int cycleCuts;
 
         private Walk(SinkMatcher matcher) {
+            this(matcher, true);
+        }
+
+        private Walk(SinkMatcher matcher, boolean reusePlatformCache) {
             this.matcher = matcher;
+            this.reusePlatformCache = reusePlatformCache;
         }
 
         private @Nullable MethodColoring recall(PsiMethod method, int budget) {
@@ -385,4 +404,6 @@ public final class IoColoringAnalyzer {
 
         private record Memo(int budget, MethodColoring coloring) {}
     }
+
+    record AnalysisSnapshot(MethodColoring coloring, int analyzedMethodCount) {}
 }
