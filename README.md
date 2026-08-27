@@ -1,4 +1,4 @@
-# Lattency
+# <img src="docs/images/lattency.svg" alt="Lattency icon" width="40"> Lattency
 
 **An IntelliJ IDEA plugin that shows you where your Java code leaves the process.**
 
