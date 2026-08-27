@@ -60,27 +60,34 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.event.release.tag_name }}" ./intellij-adapter/build/distributions/*.zip
 
-      - name: Move the release notes into CHANGELOG.md
-        if: ${{ github.event.release.body != '' }}
+      - name: Patch changelog and open a PR
         env:
           CHANGELOG: ${{ github.event.release.body }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.event.release.tag_name }}
         run: |
+          if ! grep -q '[^[:space:]]' <<< "$CHANGELOG"; then
+            echo "::notice::Release notes are empty; skipping the changelog update."
+            exit 0
+          fi
+          if grep -Fq "## [${VERSION#v}]" CHANGELOG.md; then
+            echo "::notice::$VERSION is already present in CHANGELOG.md; skipping the changelog update."
+            exit 0
+          fi
           NOTES=./build/tmp/release_note.txt
           mkdir -p "$(dirname "$NOTES")"
           printf '%s' "$CHANGELOG" > "$NOTES"
           ./gradlew patchChangelog --release-note-file="$NOTES"
-
-      - name: Open a PR with the patched changelog
-        if: ${{ github.event.release.body != '' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "::notice::CHANGELOG.md is already current; skipping the changelog PR."
+            exit 0
+          fi
           BRANCH="changelog-update-$VERSION"
           git config user.email "action@github.com"
           git config user.name "GitHub Action"
           git checkout -b "$BRANCH"
-          git commit -am "Changelog update - $VERSION"
+          git add CHANGELOG.md
+          git commit -m "Changelog update - $VERSION"
           git push --set-upstream origin "$BRANCH"
           gh pr create \
             --title "Changelog update - \`$VERSION\`" \
