@@ -1,5 +1,7 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask
+import java.io.File
 
 plugins {
     java
@@ -67,15 +69,22 @@ intellijPlatform {
         }
     }
 
-    // All four are supplied by CI secrets; absent locally, which is fine because
-    // signPlugin/publishPlugin are only run from the release workflow.
+    // CI materializes the multiline secrets as protected temporary files. File-backed
+    // credentials also let verifyPluginSignature pass the certificate to the signer CLI
+    // correctly with the currently pinned Gradle plugin.
     signing {
-        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
-        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        certificateChainFile = providers.environmentVariable("CERTIFICATE_CHAIN_FILE")
+            .map(::File)
+        privateKeyFile = providers.environmentVariable("PRIVATE_KEY_FILE")
+            .map(::File)
         password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
     }
 
     publishing {
         token = providers.environmentVariable("PUBLISH_TOKEN")
     }
+}
+
+tasks.named<VerifyPluginSignatureTask>("verifyPluginSignature") {
+    dependsOn(tasks.named("signPlugin"))
 }

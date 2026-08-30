@@ -2,7 +2,8 @@
 # release, and moves the release notes into CHANGELOG.md.
 #
 # Publishing to the JetBrains Marketplace is optional and off until the secrets exist.
-# Add all four and it switches itself on; see the Releasing section of CONTRIBUTING.md.
+# Add all four and stable releases switch it on; prereleases are never sent to the
+# Marketplace's stable channel.
 #   PUBLISH_TOKEN         Marketplace permanent token
 #   CERTIFICATE_CHAIN     plugin signing certificate chain (PEM)
 #   PRIVATE_KEY           plugin signing private key (PEM)
@@ -45,22 +46,60 @@ jobs:
       - name: Build plugin
         run: ./gradlew buildPlugin
 
+      - name: Prepare signing credentials
+        if: ${{ env.PRIVATE_KEY != '' }}
+        shell: bash
+        run: |
+          if [[ -z "$CERTIFICATE_CHAIN" || -z "$PRIVATE_KEY_PASSWORD" ]]; then
+            echo "::error::Plugin signing requires CERTIFICATE_CHAIN, PRIVATE_KEY, and PRIVATE_KEY_PASSWORD."
+            exit 1
+          fi
+          signing_dir="$RUNNER_TEMP/lattency-plugin-signing"
+          mkdir -p "$signing_dir"
+          chmod 700 "$signing_dir"
+          printf '%s' "$CERTIFICATE_CHAIN" > "$signing_dir/certificate-chain.pem"
+          printf '%s' "$PRIVATE_KEY" > "$signing_dir/private-key.pem"
+          chmod 600 "$signing_dir/certificate-chain.pem" "$signing_dir/private-key.pem"
+          echo "CERTIFICATE_CHAIN_FILE=$signing_dir/certificate-chain.pem" >> "$GITHUB_ENV"
+          echo "PRIVATE_KEY_FILE=$signing_dir/private-key.pem" >> "$GITHUB_ENV"
+
       # Signing is what the Marketplace requires; it is also just good practice for a
       # ZIP people install by hand, so it runs whenever the key is available.
       - name: Sign plugin
         if: ${{ env.PRIVATE_KEY != '' }}
         run: ./gradlew signPlugin verifyPluginSignature
 
+      - name: Validate Marketplace credentials
+        if: ${{ github.event.action == 'released' && env.PUBLISH_TOKEN != '' }}
+        shell: bash
+        run: |
+          if [[ -z "$PRIVATE_KEY" || -z "$CERTIFICATE_CHAIN" || -z "$PRIVATE_KEY_PASSWORD" ]]; then
+            echo "::error::Marketplace publishing requires all three plugin signing secrets."
+            exit 1
+          fi
+
       - name: Publish to the JetBrains Marketplace
-        if: ${{ env.PUBLISH_TOKEN != '' }}
+        if: ${{ github.event.action == 'released' && env.PUBLISH_TOKEN != '' }}
         run: ./gradlew publishPlugin
 
       - name: Attach the plugin to the GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.event.release.tag_name }}" ./intellij-adapter/build/distributions/*.zip
+        shell: bash
+        run: |
+          shopt -s nullglob
+          archives=(./intellij-adapter/build/distributions/*-signed.zip)
+          if (( ${#archives[@]} == 0 )); then
+            archives=(./intellij-adapter/build/distributions/*.zip)
+          fi
+          if (( ${#archives[@]} != 1 )); then
+            echo "::error::Expected exactly one plugin archive, found ${#archives[@]}."
+            exit 1
+          fi
+          gh release upload "${{ github.event.release.tag_name }}" "${archives[0]}"
 
       - name: Patch changelog and open a PR
+        if: ${{ github.event.action == 'released' }}
         env:
           CHANGELOG: ${{ github.event.release.body }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -87,9 +126,9 @@ jobs:
           git config user.name "GitHub Action"
           git checkout -b "$BRANCH"
           git add CHANGELOG.md
-          git commit -m "Changelog update - $VERSION"
+          git commit -m "update changelog for $VERSION"
           git push --set-upstream origin "$BRANCH"
           gh pr create \
-            --title "Changelog update - \`$VERSION\`" \
-            --body "Moves the \`$VERSION\` release notes out of \`[Unreleased]\`." \
+            --title "update changelog for \`$VERSION\`" \
+            --body "Keeps the published release notes in the repository changelog. Verified by the release workflow's changelog task." \
             --head "$BRANCH"
