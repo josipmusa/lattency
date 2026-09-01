@@ -4,33 +4,30 @@
     <vendor email="josip.musa42@gmail.com" url="https://github.com/josipmusa/lattency">Josip Musa</vendor>
 
     <description><![CDATA[
-        <p><b>See where your code leaves the process.</b></p>
+        <p><b>See where Java code leaves the process.</b></p>
 
-        <p>Lattency marks every Java method that performs I/O - database, HTTP, messaging
-        or file system - directly or through the methods it calls, so you can tell at a
-        glance whether a change adds or moves I/O without walking the call chain by hand.</p>
+        <p>Lattency adds gutter markers for database, HTTP, messaging, and file I/O. It
+        follows calls through project code, so you can see whether a method eventually
+        leaves the process without walking the call chain by hand.</p>
 
         <ul>
-            <li>A gutter icon per I/O category, dimmed when the method only reaches I/O
-                transitively.</li>
-            <li>A marker on every line that calls into I/O-colored code.</li>
-            <li>A tooltip naming the whole chain, e.g.
-                <code>place → OrderRepository.save → [DB]</code>, and click-through
-                navigation to any method along it.</li>
-            <li>Works with no configuration on a typical Spring Boot project: Spring Data
-                repositories, RestClient, RestTemplate, WebClient, HttpClient, OkHttp,
-                Feign, JDBC, Kafka, Pub/Sub, JMS, RabbitMQ, and java.io / java.nio.file.</li>
-            <li>Understands <code>@Blocking</code>, <code>@NonBlocking</code> and
-                <code>@Cacheable</code>.</li>
-            <li>Extend it with a <code>lattency.yml</code> committed at your project root:
-                custom sinks, exclusions, and the propagation depth.</li>
+            <li>Distinct icons for database, HTTP, messaging, file, and generic I/O.</li>
+            <li>Dimmed icons distinguish transitive I/O from direct I/O.</li>
+            <li>Tooltips explain the complete sink chain, with click-through navigation.</li>
+            <li>Zero configuration for common Java and Spring APIs, including Spring Data,
+                JDBC, REST clients, Kafka, Pub/Sub, JMS, RabbitMQ, and file APIs.</li>
+            <li>A committed <code>lattency.yml</code> can add project-specific sinks,
+                exclusions, and a custom propagation depth.</li>
         </ul>
 
-        <p>The analysis is entirely static - no agent, no running application, no
-        telemetry. Markers can be turned off in
-        <i>Settings | Editor | General | Gutter Icons</i>.</p>
+        <p><b>Private by design:</b> the analysis is entirely static. Lattency does not
+        run your application, make network requests, or collect telemetry.</p>
 
-        <p>Java only for now. Kotlin support is not implemented.</p>
+        <p>Requires IntelliJ IDEA 2025.2 or newer. Java only; Kotlin is not supported.</p>
+
+        <p><a href="https://github.com/josipmusa/lattency#readme">Documentation</a> ·
+        <a href="https://github.com/josipmusa/lattency/issues">Report an issue</a> ·
+        <a href="https://github.com/josipmusa/lattency">Source code</a></p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

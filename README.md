@@ -1,13 +1,16 @@
 # <img src="docs/images/lattency.svg" alt="Lattency icon" width="40"> Lattency
 
+[![JetBrains Marketplace](https://img.shields.io/jetbrains/plugin/v/33937-lattency?label=JetBrains%20Marketplace)](https://plugins.jetbrains.com/plugin/33937-lattency)
+[![Build](https://github.com/josipmusa/lattency/actions/workflows/build.yml/badge.svg)](https://github.com/josipmusa/lattency/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **An IntelliJ IDEA plugin that shows you where your Java code leaves the process.**
 
 Reading a pull request, the question you keep asking is *does this change add I/O, or
 move it somewhere worse?* Answering it means clicking down the call chain until you hit
 a repository or an HTTP client. Lattency puts the answer in the gutter.
 
-<img src="docs/images/markers-dark.png#gh-dark-mode-only" alt="Lattency gutter markers on a Spring service, dark theme" width="820">
-<img src="docs/images/markers-light.png#gh-light-mode-only" alt="Lattency gutter markers on a Spring service, light theme" width="820">
+<img src="docs/marketplace/01-io-markers.png" alt="Lattency gutter markers identifying database, HTTP, messaging, and file I/O" width="820">
 
 Reading that gutter: `place` carries the neutral icon because it reaches three different
 kinds of I/O, and each of those lines carries its own category icon - a database write, an
@@ -19,8 +22,7 @@ I/O: a call into a project type declared as a file sink in `lattency.yml`, openi
 Hovering a marker gives the chain that earned it, and clicking navigates to any method
 along that chain:
 
-<img src="docs/images/tooltip-dark.png#gh-dark-mode-only" alt="Tooltip listing the database, HTTP and messaging chains reached from place(), dark theme" width="820">
-<img src="docs/images/tooltip-light.png#gh-light-mode-only" alt="Tooltip listing the database, HTTP and messaging chains reached from place(), light theme" width="820">
+<img src="docs/marketplace/02-sink-chains.png" alt="Lattency tooltip explaining the database, HTTP, and messaging sink chains reached by a method" width="820">
 
 ## What it marks
 
@@ -53,12 +55,14 @@ telemetry.
 
 ## Install
 
-Download the ZIP from [Releases](https://github.com/josipmusa/lattency/releases), then
+[Install Lattency from the JetBrains Marketplace](https://plugins.jetbrains.com/plugin/33937-lattency),
+or open *Settings | Plugins | Marketplace* in IntelliJ IDEA and search for **Lattency**.
+
+For manual installation, download the signed ZIP from
+[GitHub Releases](https://github.com/josipmusa/lattency/releases), then choose
 *Settings | Plugins | ⚙ | Install Plugin from Disk*.
 
-Requires IntelliJ IDEA 2025.2 or newer, and Java code. Kotlin is not supported.
-
-Not on the JetBrains Marketplace yet.
+Requires IntelliJ IDEA 2025.2 or newer and a Java project. Kotlin is not supported.
 
 ## Configuration
 
@@ -219,3 +223,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) to work on it.
 ## License
 
 [MIT](LICENSE).
+
+## Feedback
+
+Found a missed I/O API or a marker that is too noisy? Please
+[open an issue](https://github.com/josipmusa/lattency/issues). Bug reports and pull
+requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md) for the development and
+verification loop.

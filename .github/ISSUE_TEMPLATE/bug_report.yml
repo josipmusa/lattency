@@ -1,0 +1,65 @@
+name: Bug report
+description: Report an incorrect, missing, or stale Lattency marker
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping make Lattency more accurate. Remove project names, paths, and source code you cannot share before submitting logs or examples.
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Lattency version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: idea-version
+    attributes:
+      label: IntelliJ IDEA version
+      description: Copy the full version from Help | About.
+      placeholder: IntelliJ IDEA 2025.2.6
+    validations:
+      required: true
+  - type: dropdown
+    id: problem
+    attributes:
+      label: What happened?
+      options:
+        - A marker is missing
+        - A marker is incorrect or too noisy
+        - A marker is stale after an edit
+        - The tooltip or navigation is incorrect
+        - The plugin caused an error or performance problem
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Minimal example
+      description: Provide the smallest Java snippet and, if relevant, lattency.yml that reproduces the problem.
+      render: java
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant IDE log output
+      description: Find it under Help | Show Log in Finder/Explorer. Remove sensitive information first.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed confidential source code and personal information.
+          required: true

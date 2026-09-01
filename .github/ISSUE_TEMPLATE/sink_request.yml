@@ -1,0 +1,54 @@
+name: I/O API request
+description: Suggest a Java API that Lattency should recognize as I/O
+title: "sink: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Lattency only adds built-in rules when the matched call itself performs I/O. Please link to documentation or source that establishes that behavior.
+  - type: input
+    id: library
+    attributes:
+      label: Library and version
+      placeholder: com.example:storage-client:1.2.3
+    validations:
+      required: true
+  - type: input
+    id: api
+    attributes:
+      label: Class or method
+      placeholder: com.example.storage.BlobClient#download
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: I/O category
+      options:
+        - Database
+        - HTTP
+        - Messaging
+        - File
+        - Generic
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence that the call performs I/O
+      description: Link to official documentation or source code and explain why the I/O occurs at this API boundary.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example usage
+      render: java
+    validations:
+      required: true
+  - type: checkboxes
+    id: config
+    attributes:
+      label: Project configuration
+      options:
+        - label: I confirmed this can be modeled temporarily with a custom sink in lattency.yml.

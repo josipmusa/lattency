@@ -93,4 +93,4 @@ gutter, which costs more than the marker was worth.
 
 - One concern per PR, with the sandbox observation described in the body.
 - Add a line to the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md).
-- CI runs the test suite and the Plugin Verifier; both must be green.§
+- CI runs the test suite and the Plugin Verifier; both must be green.
