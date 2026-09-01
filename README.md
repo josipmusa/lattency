@@ -22,7 +22,7 @@ I/O: a call into a project type declared as a file sink in `lattency.yml`, openi
 Hovering a marker gives the chain that earned it, and clicking navigates to any method
 along that chain:
 
-<img src="docs/marketplace/02-sink-chains.png" alt="Lattency tooltip explaining the database, HTTP, and messaging sink chains reached by a method" width="820">
+<img src="docs/media/lattency-demo.gif" alt="Lattency tooltip explaining a transitive database sink chain, followed by click-through navigation to the sink method" width="820">
 
 ## What it marks
 
