@@ -5,3 +5,7 @@ sinks:
     category: HTTP
 exclude:
   - dev.lattency.fixtures.excluded
+ignore:
+  sinks:
+    - class: java.nio.file.Files
+      method: exists

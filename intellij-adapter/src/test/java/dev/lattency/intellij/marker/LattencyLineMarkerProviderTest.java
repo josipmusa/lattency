@@ -170,6 +170,60 @@ public final class LattencyLineMarkerProviderTest extends LightJavaCodeInsightFi
         assertEmpty(declarationMarkers());
     }
 
+    public void testYamlIgnoredCategoryLeavesOtherCategoriesMarked() throws IOException {
+        addSpringDataRepository();
+        addFileApi();
+        writeConfig("""
+                ignore:
+                  categories: [DB]
+                """);
+
+        GutterMark marker = singleDeclarationMarker("""
+                package example;
+                class Example {
+                    void persist(OrderRepository repository) { repository.save("order"); }
+                    String read(java.nio.file.Path path) {
+                        return java.nio.file.Files.readString(path);
+                    }
+                }
+                """);
+
+        assertSame(LattencyIcons.FILE, marker.getIcon());
+        assertTooltip(marker, "read", "Files.readString", "[FILE]");
+    }
+
+    public void testYamlIgnoredSinkKeepsTheRestOfItsCategory() throws IOException {
+        myFixture.addClass("package java.nio.file; public interface Path {}");
+        myFixture.addClass("""
+                package java.nio.file;
+                public final class Files {
+                    public static String readString(Path path) { return "fixture"; }
+                    public static boolean exists(Path path) { return true; }
+                }
+                """);
+        writeConfig("""
+                ignore:
+                  sinks:
+                    - class: java.nio.file.Files
+                      method: exists
+                """);
+
+        GutterMark marker = singleDeclarationMarker("""
+                package example;
+                class Example {
+                    boolean present(java.nio.file.Path path) {
+                        return java.nio.file.Files.exists(path);
+                    }
+                    String read(java.nio.file.Path path) {
+                        return java.nio.file.Files.readString(path);
+                    }
+                }
+                """);
+
+        assertSame(LattencyIcons.FILE, marker.getIcon());
+        assertTooltip(marker, "read", "Files.readString", "[FILE]");
+    }
+
     public void testPropagatesThroughCallChain() {
         addFileApi();
         configure("""
