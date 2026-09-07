@@ -40,5 +40,6 @@
         <daemon.changeLocalityDetector
             order="first"
             implementation="dev.lattency.intellij.daemon.LattencyChangeLocalityDetector"/>
+        <notificationGroup id="Lattency" displayType="BALLOON"/>
     </extensions>
 </idea-plugin>

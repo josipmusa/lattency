@@ -199,13 +199,13 @@ or your own.
 ### When the file is wrong
 
 A malformed `lattency.yml`, an unknown `category`, or a `match` that is not one of the
-five shapes makes Lattency fall back to the built-in rules alone and log a warning to
-`idea.log` (**Help | Show Log in Finder/Explorer**). It never fails the IDE and never
-partially applies a broken file. There is no in-editor error for this yet.
+five shapes makes Lattency fall back to the built-in rules alone, show a warning balloon
+naming the problem, and log the same line to `idea.log` (**Help | Show Log in
+Finder/Explorer**). It never fails the IDE and never partially applies a broken file.
 
-Editing the file inside the IDE re-analyses open files immediately. An external edit
-takes effect once the IDE notices it on disk, which it does when you bring the window
-back to the front.
+Editing the file inside the IDE re-analyses open files about a second after you stop
+typing; you do not need to save. An external edit takes effect once the IDE notices it
+on disk, which it does when you bring the window back to the front.
 
 ## Turning it off
 

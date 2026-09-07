@@ -1,7 +1,6 @@
 package dev.lattency.core;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -22,17 +21,28 @@ public final class LattencyConfigLoader {
         if (!Files.isRegularFile(path)) {
             return LattencyConfig.defaultsOnly();
         }
-        try (InputStream input = Files.newInputStream(path)) {
-            Object document = new Load(LoadSettings.builder().build()).loadFromInputStream(input);
-            return parse(document, warningLogger);
-        } catch (RuntimeException | IOException exception) {
+        try {
+            return parse(Files.readString(path), warningLogger);
+        } catch (IOException exception) {
             warningLogger.accept("Could not read " + path + "; using built-in sinks: "
                     + exception.getMessage());
             return LattencyConfig.defaultsOnly();
         }
     }
 
-    private static LattencyConfig parse(Object document, Consumer<String> warningLogger) {
+    /** Parses the text of a {@code lattency.yml}, e.g. an editor buffer not yet saved. */
+    public static LattencyConfig parse(String yaml, Consumer<String> warningLogger) {
+        try {
+            Object document = new Load(LoadSettings.builder().build()).loadFromString(yaml);
+            return parseDocument(document, warningLogger);
+        } catch (RuntimeException exception) {
+            warningLogger.accept("lattency.yml is invalid; using built-in sinks: "
+                    + exception.getMessage());
+            return LattencyConfig.defaultsOnly();
+        }
+    }
+
+    private static LattencyConfig parseDocument(Object document, Consumer<String> warningLogger) {
         if (document == null) {
             return LattencyConfig.defaultsOnly();
         }

@@ -185,6 +185,30 @@ class LattencyConfigLoaderTest {
     }
 
     @Test
+    void parsesUnsavedTextWithoutAFile() {
+        LattencyConfig config = LattencyConfigLoader.parse("""
+                depth: 2
+                ignore:
+                  categories: [HTTP]
+                """, ignored -> {});
+
+        assertEquals(2, config.depth());
+        assertEquals(Set.of(IoCategory.HTTP), config.ignoredCategories());
+    }
+
+    @Test
+    void invalidTextLogsWarningAndUsesDefaults() {
+        var warnings = new ArrayList<String>();
+
+        LattencyConfig config = LattencyConfigLoader.parse("ignore: [DB]", warnings::add);
+
+        assertEquals(LattencyConfig.defaultsOnly(), config);
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.getFirst().contains("using built-in sinks"), warnings.getFirst());
+        assertTrue(warnings.getFirst().contains("ignore must be a mapping"), warnings.getFirst());
+    }
+
+    @Test
     void malformedFileLogsWarningAndUsesDefaults() throws IOException {
         Path configFile = directory.resolve("lattency.yml");
         Files.writeString(configFile, "sinks: definitely-not-a-list");

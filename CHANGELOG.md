@@ -10,10 +10,14 @@
   (for example `[DB]`), and `ignore.sinks` turns off individual APIs in the same five
   match shapes as `sinks` while keeping the rest of their category marked.
 
+- A warning balloon when `lattency.yml` cannot be applied, with the same text as the
+  log line.
+
 ### Fixed
 
-- Saving `lattency.yml` now re-highlights open files right away instead of leaving
-  stale markers until each file is next touched.
+- Editing `lattency.yml` in the IDE now applies about a second after you stop typing,
+  and re-highlights open files, instead of waiting for autosave and for each file to be
+  touched.
 - An unknown `category` in `lattency.yml` now logs the valid names alongside the
   rejected one.
 
