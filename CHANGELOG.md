@@ -6,10 +6,23 @@
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.2.0] - 2026-09-07
+
+### Added
+
 - `ignore` section in `lattency.yml`: `ignore.categories` turns off whole I/O categories
   (for example `[DB]`), and `ignore.sinks` turns off individual APIs in the same five
   match shapes as `sinks` while keeping the rest of their category marked.
-
 - A warning balloon when `lattency.yml` cannot be applied, with the same text as the
   log line.
 
@@ -46,5 +59,6 @@ First public release.
   implementation is colored, and the tooltip names the implementation.
 - Markers can be turned off in *Settings | Editor | General | Gutter Icons*.
 
-[Unreleased]: https://github.com/josipmusa/lattency/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/josipmusa/lattency/releases/tag/v0.1.0
+[Unreleased]: https://github.com/josipmusa/lattency/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/josipmusa/lattency/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/josipmusa/lattency/commits/v0.1.0
