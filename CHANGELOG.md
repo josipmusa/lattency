@@ -10,6 +10,13 @@
   (for example `[DB]`), and `ignore.sinks` turns off individual APIs in the same five
   match shapes as `sinks` while keeping the rest of their category marked.
 
+### Fixed
+
+- Saving `lattency.yml` now re-highlights open files right away instead of leaving
+  stale markers until each file is next touched.
+- An unknown `category` in `lattency.yml` now logs the valid names alongside the
+  rejected one.
+
 ## [0.1.0]
 
 First public release.

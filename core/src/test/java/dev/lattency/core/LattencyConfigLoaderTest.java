@@ -79,7 +79,7 @@ class LattencyConfigLoaderTest {
     }
 
     @Test
-    void unknownIgnoredCategoryIsMalformed() throws IOException {
+    void unknownIgnoredCategoryIsMalformedAndNamesTheValidOnes() throws IOException {
         Path configFile = directory.resolve("lattency.yml");
         Files.writeString(configFile, """
                 ignore:
@@ -91,6 +91,9 @@ class LattencyConfigLoaderTest {
 
         assertEquals(LattencyConfig.defaultsOnly(), config);
         assertEquals(1, warnings.size());
+        assertTrue(warnings.getFirst().contains("Unknown category 'DATABASE'"), warnings.getFirst());
+        assertTrue(warnings.getFirst().contains("[DB, HTTP, MESSAGING, FILE, GENERIC]"),
+                warnings.getFirst());
     }
 
     @Test

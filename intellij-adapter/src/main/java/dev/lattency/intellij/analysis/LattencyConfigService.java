@@ -1,5 +1,6 @@
 package dev.lattency.intellij.analysis;
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
@@ -33,11 +34,13 @@ public final class LattencyConfigService {
 
     private static final Logger LOG = Logger.getInstance(LattencyConfigService.class);
 
+    private final Project project;
     private final @Nullable Path configPath;
     private final SimpleModificationTracker tracker = new SimpleModificationTracker();
     private volatile @Nullable Snapshot snapshot;
 
     public LattencyConfigService(Project project) {
+        this.project = project;
         String basePath = project.getBasePath();
         configPath = basePath == null ? null : Path.of(basePath, CONFIG_FILE_NAME);
         if (configPath != null) {
@@ -91,6 +94,11 @@ public final class LattencyConfigService {
             for (VFileEvent event : events) {
                 if (touchesConfig(event)) {
                     tracker.incModificationCount();
+                    // Bumping the tracker invalidates cached results, but the daemon only
+                    // re-queries markers in files it decides to re-highlight, so open files
+                    // would keep stale icons until touched. A config change is an external
+                    // input to every file's analysis; restarting once is the honest answer.
+                    DaemonCodeAnalyzer.getInstance(project).restart();
                     return;
                 }
             }

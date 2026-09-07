@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +66,14 @@ public final class LattencyConfigLoader {
     }
 
     private static IoCategory parseCategory(Object value) {
-        return IoCategory.valueOf(requireString(value, "category"));
+        String name = requireString(value, "category");
+        for (IoCategory category : IoCategory.values()) {
+            if (category.name().equals(name)) {
+                return category;
+            }
+        }
+        throw new IllegalArgumentException("Unknown category '" + name + "'; expected one of "
+                + Arrays.toString(IoCategory.values()));
     }
 
     /** One of the five match shapes, shared by {@code sinks[].match} and {@code ignore.sinks[]}. */

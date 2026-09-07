@@ -184,9 +184,11 @@ ignore:
     - construction: java.io.FileInputStream
 ```
 
-`categories` takes the same names as `sinks.category`. Ignoring a category removes every
-rule of that category, so a method whose only I/O was in that category is unmarked, and
-it stops contributing that I/O to its callers.
+`categories` takes any of the five category names, the same ones `sinks.category` uses:
+`DB`, `HTTP`, `MESSAGING`, `FILE`, `GENERIC`. Anything else is a config error, and the
+warning in the log names the valid ones. Ignoring a category removes every rule of that
+category, so a method whose only I/O was in that category is unmarked, and it stops
+contributing that I/O to its callers.
 
 `sinks` entries match exactly like sink rules do: `package`, `class`, `class` + `method`
 and `annotation` cover calls, and `construction` covers `new X(..)`. Ignoring
