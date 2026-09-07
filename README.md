@@ -84,6 +84,12 @@ sinks:
 
 exclude:
   - com.example.legacy
+
+ignore:
+  categories: [DB]
+  sinks:
+    - class: java.nio.file.Files
+      method: exists
 ```
 
 ### `depth`
@@ -155,6 +161,38 @@ rule, built-in or your own.
 
 Test sources are analysed like any other code. Exclude their packages if you do not want
 markers there.
+
+### `ignore`
+
+Where `exclude` quiets down *your* code, `ignore` quiets down the I/O rules themselves:
+a whole category you do not care about, or an individual API that is too noisy to be
+worth a marker.
+
+```yaml
+ignore:
+  # Nothing in these categories is a sink any more, built-in or from `sinks`.
+  categories: [DB, MESSAGING]
+
+  # Individual APIs, in the same five shapes as `sinks.match`. The rest of the
+  # category stays marked.
+  sinks:
+    - class: java.nio.file.Files
+      method: exists
+    - class: java.io.File
+    - package: feign
+    - annotation: org.jetbrains.annotations.Blocking
+    - construction: java.io.FileInputStream
+```
+
+`categories` takes the same names as `sinks.category`. Ignoring a category removes every
+rule of that category, so a method whose only I/O was in that category is unmarked, and
+it stops contributing that I/O to its callers.
+
+`sinks` entries match exactly like sink rules do: `package`, `class`, `class` + `method`
+and `annotation` cover calls, and `construction` covers `new X(..)`. Ignoring
+`class: java.io.FileInputStream` leaves `new FileInputStream(path)` marked; add a
+`construction` entry to ignore that too. Ignore rules win over every sink rule, built-in
+or your own.
 
 ### When the file is wrong
 

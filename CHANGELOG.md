@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `ignore` section in `lattency.yml`: `ignore.categories` turns off whole I/O categories
+  (for example `[DB]`), and `ignore.sinks` turns off individual APIs in the same five
+  match shapes as `sinks` while keeping the rest of their category marked.
+
 ## [0.1.0]
 
 First public release.

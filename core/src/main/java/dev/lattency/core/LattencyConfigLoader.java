@@ -5,8 +5,10 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import org.snakeyaml.engine.v2.api.Load;
 import org.snakeyaml.engine.v2.api.LoadSettings;
@@ -35,42 +37,59 @@ public final class LattencyConfigLoader {
         }
         Map<?, ?> root = requireMap(document, "root");
         List<SinkDefinition> sinks = new ArrayList<>();
-        Object sinkItems = root.containsKey("sinks") ? root.get("sinks") : List.of();
-        for (Object item : requireList(sinkItems, "sinks")) {
+        for (Object item : requireList(orDefault(root, "sinks", List.of()), "sinks")) {
             Map<?, ?> sink = requireMap(item, "sink");
-            IoCategory category = IoCategory.valueOf(requireString(sink.get("category"), "category"));
-            Map<?, ?> match = requireMap(sink.get("match"), "match");
-            if (match.size() == 1 && match.containsKey("package")) {
-                sinks.add(SinkDefinition.packagePrefix(
-                        requireString(match.get("package"), "package"), category));
-            } else if (match.size() == 1 && match.containsKey("class")) {
-                sinks.add(SinkDefinition.className(
-                        requireString(match.get("class"), "class"), category));
-            } else if (match.size() == 2
-                    && match.containsKey("class")
-                    && match.containsKey("method")) {
-                sinks.add(SinkDefinition.method(
-                        requireString(match.get("class"), "class"),
-                        requireString(match.get("method"), "method"),
-                        category));
-            } else if (match.size() == 1 && match.containsKey("annotation")) {
-                sinks.add(SinkDefinition.annotation(
-                        requireString(match.get("annotation"), "annotation"), category));
-            } else if (match.size() == 1 && match.containsKey("construction")) {
-                sinks.add(SinkDefinition.construction(
-                        requireString(match.get("construction"), "construction"), category));
-            } else {
-                throw new IllegalArgumentException("A sink match must contain package, class, "
-                        + "class + method, annotation, or construction");
-            }
+            IoCategory category = parseCategory(sink.get("category"));
+            sinks.add(new SinkDefinition(
+                    parsePattern(requireMap(sink.get("match"), "match")), category));
         }
 
         List<String> exclusions = new ArrayList<>();
-        Object exclusionItems = root.containsKey("exclude") ? root.get("exclude") : List.of();
-        for (Object exclusion : requireList(exclusionItems, "exclude")) {
+        for (Object exclusion : requireList(orDefault(root, "exclude", List.of()), "exclude")) {
             exclusions.add(requireString(exclusion, "exclude entry"));
         }
-        return new LattencyConfig(sinks, exclusions, parseDepth(root, warningLogger));
+
+        Map<?, ?> ignore = requireMap(orDefault(root, "ignore", Map.of()), "ignore");
+        Set<IoCategory> ignoredCategories = EnumSet.noneOf(IoCategory.class);
+        for (Object category : requireList(
+                orDefault(ignore, "categories", List.of()), "ignore.categories")) {
+            ignoredCategories.add(parseCategory(category));
+        }
+        List<SinkPattern> ignoredSinks = new ArrayList<>();
+        for (Object item : requireList(orDefault(ignore, "sinks", List.of()), "ignore.sinks")) {
+            ignoredSinks.add(parsePattern(requireMap(item, "ignore.sinks entry")));
+        }
+
+        return new LattencyConfig(
+                sinks, exclusions, parseDepth(root, warningLogger), ignoredCategories, ignoredSinks);
+    }
+
+    private static IoCategory parseCategory(Object value) {
+        return IoCategory.valueOf(requireString(value, "category"));
+    }
+
+    /** One of the five match shapes, shared by {@code sinks[].match} and {@code ignore.sinks[]}. */
+    private static SinkPattern parsePattern(Map<?, ?> match) {
+        if (match.size() == 1 && match.containsKey("package")) {
+            return SinkPattern.packagePrefix(requireString(match.get("package"), "package"));
+        }
+        if (match.size() == 1 && match.containsKey("class")) {
+            return SinkPattern.className(requireString(match.get("class"), "class"));
+        }
+        if (match.size() == 2 && match.containsKey("class") && match.containsKey("method")) {
+            return SinkPattern.method(
+                    requireString(match.get("class"), "class"),
+                    requireString(match.get("method"), "method"));
+        }
+        if (match.size() == 1 && match.containsKey("annotation")) {
+            return SinkPattern.annotation(requireString(match.get("annotation"), "annotation"));
+        }
+        if (match.size() == 1 && match.containsKey("construction")) {
+            return SinkPattern.construction(
+                    requireString(match.get("construction"), "construction"));
+        }
+        throw new IllegalArgumentException("A sink match must contain package, class, "
+                + "class + method, annotation, or construction");
     }
 
     private static int parseDepth(Map<?, ?> root, Consumer<String> warningLogger) {
@@ -89,6 +108,10 @@ public final class LattencyConfigLoader {
             return LattencyConfig.MAX_DEPTH;
         }
         return depth;
+    }
+
+    private static Object orDefault(Map<?, ?> map, String key, Object fallback) {
+        return map.containsKey(key) ? map.get(key) : fallback;
     }
 
     private static Map<?, ?> requireMap(Object value, String field) {

@@ -8,19 +8,25 @@ import java.util.Optional;
 public final class SinkMatcher {
     private final List<SinkDefinition> definitions;
     private final List<String> exclusions;
+    private final List<SinkPattern> ignoredSinks;
 
     public SinkMatcher(LattencyConfig config) {
-        definitions = new ArrayList<>(BuiltInSinks.definitions());
-        definitions.addAll(config.sinks());
+        List<SinkDefinition> all = new ArrayList<>(BuiltInSinks.definitions());
+        all.addAll(config.sinks());
+        definitions = all.stream()
+                .filter(definition -> !config.ignoredCategories().contains(definition.category()))
+                .toList();
         exclusions = config.exclusions();
+        ignoredSinks = config.ignoredSinks();
     }
 
     public Optional<IoCategory> match(SinkFacts facts) {
-        if (isExcluded(facts.containingClassFqn())) {
+        if (isExcluded(facts.containingClassFqn())
+                || ignoredSinks.stream().anyMatch(ignored -> ignored.matches(facts))) {
             return Optional.empty();
         }
         return definitions.stream()
-                .filter(definition -> matches(definition, facts))
+                .filter(definition -> definition.shape().matches(facts))
                 .map(SinkDefinition::category)
                 .findFirst();
     }
@@ -28,27 +34,5 @@ public final class SinkMatcher {
     public boolean isExcluded(String classFqn) {
         return exclusions.stream().anyMatch(pattern ->
                 classFqn.equals(pattern) || classFqn.startsWith(pattern + "."));
-    }
-
-    private static boolean matches(SinkDefinition definition, SinkFacts facts) {
-        boolean construction = facts.target() == SinkFacts.Target.CONSTRUCTION;
-        return switch (definition.kind()) {
-            // Type-shaped rules describe an API surface; constructing the type is not
-            // calling it (see SinkFacts).
-            case PACKAGE_PREFIX -> !construction
-                    && (facts.containingClassFqn().equals(definition.pattern())
-                            || facts.containingClassFqn().startsWith(definition.pattern() + "."));
-            case CLASS -> !construction
-                    && facts.containingClassFqn().equals(definition.pattern());
-            case METHOD -> !construction
-                    && facts.containingClassFqn().equals(definition.pattern())
-                    && facts.methodName().equals(definition.methodName());
-            case SUPERTYPE -> !construction
-                    && facts.supertypeFqns().contains(definition.pattern());
-            // Annotations name the target itself, so they apply to constructors too.
-            case ANNOTATION -> facts.annotationFqns().contains(definition.pattern());
-            case CONSTRUCTION -> construction
-                    && facts.containingClassFqn().equals(definition.pattern());
-        };
     }
 }

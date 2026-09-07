@@ -19,7 +19,9 @@ class SinkMatcherTest {
                         SinkDefinition.method("example.Bus", "send", IoCategory.MESSAGING),
                         SinkDefinition.annotation("example.Blocking", IoCategory.GENERIC)),
                 List.of(),
-                LattencyConfig.DEFAULT_DEPTH));
+                LattencyConfig.DEFAULT_DEPTH,
+                Set.of(),
+                List.of()));
 
         assertEquals(IoCategory.HTTP, configured.match(facts("example.remote.Client", "get")).orElseThrow());
         assertEquals(IoCategory.FILE, configured.match(facts("example.Files", "read")).orElseThrow());
@@ -65,8 +67,66 @@ class SinkMatcherTest {
     @Test
     void exclusionsWinOverSinkRules() {
         var configured = new SinkMatcher(new LattencyConfig(
-                List.of(), List.of("java.nio"), LattencyConfig.DEFAULT_DEPTH));
+                List.of(), List.of("java.nio"), LattencyConfig.DEFAULT_DEPTH, Set.of(), List.of()));
         assertTrue(configured.match(facts("java.nio.file.Files", "readString")).isEmpty());
+    }
+
+    @Test
+    void ignoredCategoryDropsBuiltInAndProjectSinksOfThatCategoryOnly() {
+        var configured = new SinkMatcher(new LattencyConfig(
+                List.of(SinkDefinition.className("example.Store", IoCategory.DB)),
+                List.of(),
+                LattencyConfig.DEFAULT_DEPTH,
+                Set.of(IoCategory.DB),
+                List.of()));
+
+        assertTrue(configured.match(facts("java.sql.Connection", "commit")).isEmpty());
+        assertTrue(configured.match(facts("example.Store", "save")).isEmpty());
+        var repository = SinkFacts.ofCall(
+                "example.OrderRepository", Set.of(BuiltInSinks.SPRING_DATA_REPOSITORY), "save", Set.of());
+        assertTrue(configured.match(repository).isEmpty());
+        assertEquals(IoCategory.HTTP, configured.match(facts("okhttp3.Call", "execute")).orElseThrow());
+    }
+
+    @Test
+    void ignoredSinkKeepsTheRestOfItsCategory() {
+        var configured = new SinkMatcher(new LattencyConfig(
+                List.of(),
+                List.of(),
+                LattencyConfig.DEFAULT_DEPTH,
+                Set.of(),
+                List.of(
+                        SinkPattern.method("java.nio.file.Files", "exists"),
+                        SinkPattern.className("java.io.File"),
+                        SinkPattern.packagePrefix("feign"),
+                        SinkPattern.annotation(BuiltInSinks.BLOCKING),
+                        SinkPattern.construction("java.io.FileInputStream"))));
+
+        assertTrue(configured.match(facts("java.nio.file.Files", "exists")).isEmpty());
+        assertEquals(IoCategory.FILE, configured.match(facts("java.nio.file.Files", "readString")).orElseThrow());
+        assertTrue(configured.match(facts("java.io.File", "delete")).isEmpty());
+        assertEquals(IoCategory.FILE, configured.match(facts("java.io.FileWriter", "write")).orElseThrow());
+        assertTrue(configured.match(facts("feign.Client", "execute")).isEmpty());
+        assertEquals(IoCategory.HTTP, configured.match(facts("okhttp3.Call", "execute")).orElseThrow());
+        assertTrue(configured.match(
+                SinkFacts.ofCall("example.Work", Set.of(), "run", Set.of(BuiltInSinks.BLOCKING))).isEmpty());
+        // Ignoring construction leaves the type's methods as sinks, mirroring the sink rules.
+        assertTrue(configured.match(
+                SinkFacts.ofConstruction("java.io.FileInputStream", Set.of(), Set.of())).isEmpty());
+        assertEquals(IoCategory.FILE, configured.match(facts("java.io.FileInputStream", "read")).orElseThrow());
+    }
+
+    @Test
+    void ignoredSinkWinsOverProjectSinkRules() {
+        var configured = new SinkMatcher(new LattencyConfig(
+                List.of(SinkDefinition.className("example.Store", IoCategory.DB)),
+                List.of(),
+                LattencyConfig.DEFAULT_DEPTH,
+                Set.of(),
+                List.of(SinkPattern.method("example.Store", "ping"))));
+
+        assertTrue(configured.match(facts("example.Store", "ping")).isEmpty());
+        assertEquals(IoCategory.DB, configured.match(facts("example.Store", "save")).orElseThrow());
     }
 
     @Test
